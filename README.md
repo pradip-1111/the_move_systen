@@ -2,23 +2,23 @@
 
 A modern, immersive full-stack movie review platform built with React, Node.js, Express, and MongoDB. Experience cinema culture with cutting-edge UI design, 3D visual elements, and a comprehensive movie discovery and review system.
 
-## ✨ Features
+##  Features
 
-### 🎨 Visual & User Experience
+###  Visual & User Experience
 - **Modern Dark/Light Theme System**: Seamless theme switching with persistent user preferences
 - **3D Cinema Elements**: Immersive 3D movie reels, film strips, and floating cinema objects
 - **Glass Morphism Design**: Contemporary UI with translucent effects and smooth animations
 - **Responsive Design**: Optimized for desktop, tablet, and mobile devices with adaptive layouts
 - **Micro-interactions**: Smooth hover effects, transitions, and animated components
 
-### 🎬 Core Features
+###  Core Features
 - **Movie Discovery**: Browse and search movies with advanced filtering and modern card layouts
 - **User Reviews**: Write, read, and rate movie reviews with enhanced UI components
 - **Personal Watchlist**: Track movies you want to watch with status management
 - **User Authentication**: Secure registration and login system with modern forms
 - **Real-time Updates**: Live synchronization of reviews, ratings, and watchlist changes
 
-### 🚀 Advanced Features
+###  Advanced Features
 - **Review Voting**: Mark reviews as helpful or not helpful with instant feedback
 - **Movie Ratings**: Aggregate rating system with detailed statistics and visual indicators
 - **User Profiles**: Personalized user profiles with review history and enhanced layouts
@@ -50,7 +50,7 @@ A modern, immersive full-stack movie review platform built with React, Node.js, 
 - **bcryptjs** - Password hashing
 - **Express Validator** - Input validation
 
-## 🎨 Modern UI Features
+##  Modern UI Features
 
 ### Dark/Light Theme System
 - **Smart Theme Detection**: Automatically detects user's system preference on first visit
