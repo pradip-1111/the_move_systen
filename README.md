@@ -581,8 +581,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 For support and questions:
 - Create an issue on GitHub
-- Email: support@moviereviewplatform.com
-- Documentation: [Wiki](https://github.com/your-username/movie-review-platform/wiki)
+- Documentation: [Wiki](https://github.com/pradip-1111/movie-review-platform/wiki)
 
 ## 🎯 Recent Accomplishments
 
