@@ -568,7 +568,7 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 
 ## 👥 Authors
 
-- **Movie Review Platform Team** - [GitHub Profile](https://github.com/your-username)
+- **Movie Review Platform Team** - [GitHub Profile](https://github.com/pradip-1111)
 
 ## 🙏 Acknowledgments
 
