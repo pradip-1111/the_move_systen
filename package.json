@@ -22,5 +22,8 @@
   "license": "MIT",
   "devDependencies": {
     "concurrently": "^7.6.0"
+  },
+  "dependencies": {
+    "react-scripts": "^0.0.0"
   }
 }
