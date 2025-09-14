@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { toast } from 'react-hot-toast';
@@ -28,6 +28,29 @@ const MovieDetailPage = () => {
 
   const isInWatchlist = watchlistMovies && watchlistMovies.some(movie => movie.id === parseInt(id) || movie.id === id);
 
+  const fetchMovie = useCallback(async () => {
+    try {
+      const response = await moviesAPI.getMovie(id);
+      setMovie(response.data.movie);
+      setError(null);
+    } catch (error) {
+      console.error('Failed to fetch movie:', error);
+      setError('Failed to load movie details');
+      toast.error('Failed to load movie details');
+    }
+  }, [id]);
+
+  const fetchReviews = useCallback(async () => {
+    try {
+      const response = await reviewsAPI.getMovieReviews(id);
+      setReviews(response.data.reviews || []);
+    } catch (error) {
+      console.error('Failed to fetch reviews:', error);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
   useEffect(() => {
     console.log('MovieDetailPage - ID from params:', id);
     console.log('MovieDetailPage - ID type:', typeof id);
@@ -47,29 +70,6 @@ const MovieDetailPage = () => {
     console.log('Watchlist movie IDs:', watchlistMovies ? watchlistMovies.map(m => m.id) : []);
     console.log('Is in watchlist:', isInWatchlist);
   }, [watchlistMovies, isInWatchlist]);
-
-  const fetchMovie = async () => {
-    try {
-      const response = await moviesAPI.getMovie(id);
-      setMovie(response.data.movie);
-      setError(null);
-    } catch (error) {
-      console.error('Failed to fetch movie:', error);
-      setError('Failed to load movie details');
-      toast.error('Failed to load movie details');
-    }
-  };
-
-  const fetchReviews = async () => {
-    try {
-      const response = await reviewsAPI.getMovieReviews(id);
-      setReviews(response.data.reviews || []);
-    } catch (error) {
-      console.error('Failed to fetch reviews:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
 
   const handleWatchlistToggle = async () => {
