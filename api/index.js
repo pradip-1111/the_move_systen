@@ -1,45 +1,33 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
-require('dotenv').config();
-
-// Import routes
-const authRoutes = require('../backend/routes/auth');
-const movieRoutes = require('../backend/routes/movies');
-const reviewRoutes = require('../backend/routes/reviews');
-const userRoutes = require('../backend/routes/users');
-const watchlistRoutes = require('../backend/routes/watchlist');
 
 const app = express();
 
 // Security middleware
-app.use(helmet({
-  contentSecurityPolicy: false,
-  crossOriginEmbedderPolicy: false
-}));
+app.use(helmet());
 app.use(compression());
 
-// Trust proxy for Vercel
+// Trust proxy for rate limiting
 app.set('trust proxy', 1);
 
 // Rate limiting
 const limiter = rateLimit({
-  windowMs: parseInt(process.env.RATE_LIMIT_WINDOW_MS) || 15 * 60 * 1000,
-  max: parseInt(process.env.RATE_LIMIT_MAX_REQUESTS) || 100,
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // limit each IP to 100 requests per windowMs
   message: 'Too many requests from this IP, please try again later.',
   standardHeaders: true,
   legacyHeaders: false,
 });
-app.use(limiter);
+app.use('/api/', limiter);
 
 // CORS configuration for production
 app.use(cors({
-  origin: process.env.NODE_ENV === 'production' 
-    ? [process.env.CLIENT_URL, /\.vercel\.app$/]
-    : 'http://localhost:3000',
+  origin: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
 
@@ -47,104 +35,29 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// MongoDB connection for serverless
-let cachedConnection = null;
-
-const connectMongoDB = async () => {
-  if (cachedConnection) {
-    return cachedConnection;
-  }
-
-  try {
-    const connection = await mongoose.connect(process.env.MONGODB_URI, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000,
-      socketTimeoutMS: 45000,
-      bufferCommands: false,
-      bufferMaxEntries: 0
-    });
-    
-    cachedConnection = connection;
-    console.log('✅ Connected to MongoDB');
-    return connection;
-  } catch (error) {
-    console.error('❌ MongoDB connection error:', error.message);
-    throw error;
-  }
-};
-
-// Database middleware
-const requireDatabase = async (req, res, next) => {
-  try {
-    await connectMongoDB();
-    next();
-  } catch (error) {
-    return res.status(503).json({
-      error: 'Database Unavailable',
-      message: 'MongoDB connection failed. Please try again later.',
-      details: process.env.NODE_ENV === 'development' ? error.message : undefined
-    });
-  }
-};
-
-// Routes
-app.use('/auth', requireDatabase, authRoutes);
-app.use('/movies', requireDatabase, movieRoutes);
-app.use('/reviews', requireDatabase, reviewRoutes);
-app.use('/users', requireDatabase, userRoutes);
-app.use('/watchlist', requireDatabase, watchlistRoutes);
-
 // Health check endpoint
-app.get('/health', async (req, res) => {
-  try {
-    await connectMongoDB();
-    res.status(200).json({
-      status: 'OK',
-      message: 'Movie Review Platform API is running',
-      database: 'Connected',
-      timestamp: new Date().toISOString()
-    });
-  } catch (error) {
-    res.status(503).json({
-      status: 'ERROR',
-      message: 'Service partially available',
-      database: 'Disconnected',
-      timestamp: new Date().toISOString()
-    });
-  }
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'ok', message: 'Movie Hub API is running' });
 });
 
-// Error handling middleware
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  
-  if (err.name === 'ValidationError') {
-    return res.status(400).json({
-      error: 'Validation Error',
-      message: err.message
-    });
-  }
-  
-  if (err.name === 'CastError') {
-    return res.status(400).json({
-      error: 'Invalid ID',
-      message: 'The provided ID is not valid'
-    });
-  }
-  
-  res.status(err.status || 500).json({
-    error: err.message || 'Internal Server Error',
-    ...(process.env.NODE_ENV === 'development' && { stack: err.stack })
-  });
+// Mock data for demo
+const movies = [
+  { id: 1, title: 'The Shawshank Redemption', year: 1994, rating: 9.3 },
+  { id: 2, title: 'The Godfather', year: 1972, rating: 9.2 },
+  { id: 3, title: 'The Dark Knight', year: 2008, rating: 9.0 }
+];
+
+// API routes
+app.get('/api/movies', (req, res) => {
+  res.json(movies);
 });
 
-// 404 handler
-app.use('*', (req, res) => {
-  res.status(404).json({
-    error: 'Not Found',
-    message: 'The requested resource was not found'
-  });
+app.get('/api/movies/:id', (req, res) => {
+  const movie = movies.find(m => m.id === parseInt(req.params.id));
+  if (!movie) {
+    return res.status(404).json({ error: 'Movie not found' });
+  }
+  res.json(movie);
 });
 
 // Export for Vercel
