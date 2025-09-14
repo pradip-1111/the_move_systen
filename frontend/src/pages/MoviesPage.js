@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
-import { fetchMovies } from '../store/slices/movieSlice';
+import { fetchMovies, clearFilters } from '../store/slices/movieSlice';
 import MovieCard from '../components/movies/MovieCard';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import ErrorMessage from '../components/ui/ErrorMessage';

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useSelector } from 'react-redux';
-import { FiStar, FiUsers, FiTrendingUp, FiAward, FiTarget, FiHeart } from 'react-icons/fi';
+import { FiStar, FiUsers, FiTrendingUp, FiAward, FiHeart } from 'react-icons/fi';
 
 const AboutPage = () => {
   const { mode } = useSelector((state) => state.theme);
