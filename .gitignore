@@ -109,3 +109,24 @@ Thumbs.db
 # Temporary files
 *.tmp
 *.temp
+
+# Project-specific files
+backend/.env
+frontend/.env
+backend/database.sqlite
+*.lock
+
+# Vercel
+.vercel
+
+# API keys and secrets
+api-keys.json
+secrets.json
+
+# Test files and scripts (if temporary)
+test-*.js
+*-test.js
+
+# Backup files
+*.backup
+*.bak
