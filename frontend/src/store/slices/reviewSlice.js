@@ -89,7 +89,7 @@ const reviewSlice = createSlice({
       state.currentReview = action.payload;
     },
     updateReviewInList: (state, action) => {
-      const index = state.reviews.findIndex(review => review._id === action.payload._id);
+      const index = state.reviews.findIndex(review => review.id === action.payload.id);
       if (index !== -1) {
         state.reviews[index] = action.payload;
       }
@@ -140,7 +140,7 @@ const reviewSlice = createSlice({
       })
       .addCase(updateReview.fulfilled, (state, action) => {
         state.submitLoading = false;
-        const index = state.reviews.findIndex(review => review._id === action.payload._id);
+        const index = state.reviews.findIndex(review => review.id === action.payload.id);
         if (index !== -1) {
           state.reviews[index] = action.payload;
         }
@@ -158,7 +158,7 @@ const reviewSlice = createSlice({
       })
       .addCase(deleteReview.fulfilled, (state, action) => {
         state.loading = false;
-        state.reviews = state.reviews.filter(review => review._id !== action.payload);
+        state.reviews = state.reviews.filter(review => review.id !== action.payload);
         state.totalReviews = Math.max(0, state.totalReviews - 1);
       })
       .addCase(deleteReview.rejected, (state, action) => {
@@ -170,7 +170,7 @@ const reviewSlice = createSlice({
     builder
       .addCase(markReviewHelpful.fulfilled, (state, action) => {
         const { reviewId } = action.payload;
-        const review = state.reviews.find(r => r._id === reviewId);
+        const review = state.reviews.find(r => r.id === reviewId);
         if (review) {
           review.helpfulCount = action.payload.helpfulCount;
           review.isMarkedHelpful = action.payload.isMarkedHelpful;

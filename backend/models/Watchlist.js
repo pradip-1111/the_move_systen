@@ -1,162 +1,178 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-const watchlistSchema = new mongoose.Schema({
-  user: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: [true, 'User is required for watchlist entry']
+const Watchlist = sequelize.define('Watchlist', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
   },
-  movie: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Movie',
-    required: [true, 'Movie is required for watchlist entry']
+  userId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'users',
+      key: 'id'
+    }
+  },
+  movieId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'movies',
+      key: 'id'
+    }
   },
   status: {
-    type: String,
-    enum: ['want_to_watch', 'watching', 'watched'],
-    default: 'want_to_watch'
+    type: DataTypes.ENUM('want_to_watch', 'watching', 'watched'),
+    defaultValue: 'want_to_watch'
   },
   priority: {
-    type: String,
-    enum: ['low', 'medium', 'high'],
-    default: 'medium'
+    type: DataTypes.ENUM('low', 'medium', 'high'),
+    defaultValue: 'medium'
   },
   notes: {
-    type: String,
-    maxlength: [500, 'Notes cannot exceed 500 characters'],
-    trim: true
+    type: DataTypes.TEXT,
+    validate: {
+      len: [0, 500]
+    }
   },
   dateWatched: {
-    type: Date
+    type: DataTypes.DATE
   },
   personalRating: {
-    type: Number,
-    min: [1, 'Rating must be at least 1'],
-    max: [5, 'Rating cannot exceed 5']
+    type: DataTypes.INTEGER,
+    validate: {
+      min: 1,
+      max: 5
+    }
   },
   isPublic: {
-    type: Boolean,
-    default: true
+    type: DataTypes.BOOLEAN,
+    defaultValue: true
   }
 }, {
+  tableName: 'watchlists',
   timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
-
-// Compound index to ensure one entry per user per movie
-watchlistSchema.index({ user: 1, movie: 1 }, { unique: true });
-watchlistSchema.index({ user: 1, status: 1 });
-watchlistSchema.index({ user: 1, createdAt: -1 });
-watchlistSchema.index({ movie: 1 });
-
-// Virtual for populated movie details
-watchlistSchema.virtual('movieDetails', {
-  ref: 'Movie',
-  localField: 'movie',
-  foreignField: '_id',
-  justOne: true,
-  select: 'title posterUrl releaseDate genres averageRating runtime'
-});
-
-// Pre-save middleware to handle status changes
-watchlistSchema.pre('save', function(next) {
-  if (this.isModified('status')) {
-    if (this.status === 'watched' && !this.dateWatched) {
-      this.dateWatched = new Date();
-    } else if (this.status !== 'watched') {
-      this.dateWatched = undefined;
+  indexes: [
+    {
+      unique: true,
+      fields: ['userId', 'movieId']
+    },
+    {
+      fields: ['userId', 'status']
+    },
+    {
+      fields: ['userId', 'createdAt']
+    },
+    {
+      fields: ['movieId']
+    }
+  ],
+  hooks: {
+    beforeSave: (watchlist) => {
+      if (watchlist.changed('status')) {
+        if (watchlist.status === 'watched' && !watchlist.dateWatched) {
+          watchlist.dateWatched = new Date();
+        } else if (watchlist.status !== 'watched') {
+          watchlist.dateWatched = null;
+        }
+      }
+    },
+    afterSave: async (watchlist) => {
+      // Update movie watchlist count
+      const Movie = require('./Movie');
+      const movie = await Movie.findByPk(watchlist.movieId);
+      if (movie) {
+        const count = await Watchlist.count({ where: { movieId: watchlist.movieId } });
+        movie.watchlistCount = count;
+        await movie.save();
+      }
+    },
+    afterDestroy: async (watchlist) => {
+      // Update movie watchlist count
+      const Movie = require('./Movie');
+      const movie = await Movie.findByPk(watchlist.movieId);
+      if (movie) {
+        const count = await Watchlist.count({ where: { movieId: watchlist.movieId } });
+        movie.watchlistCount = count;
+        await movie.save();
+      }
     }
   }
-  next();
 });
 
-// Post-save middleware to update movie watchlist count
-watchlistSchema.post('save', async function() {
-  try {
-    const Movie = mongoose.model('Movie');
-    const movie = await Movie.findById(this.movie);
-    if (movie) {
-      const count = await mongoose.model('Watchlist').countDocuments({ movie: this.movie });
-      movie.watchlistCount = count;
-      await movie.save();
-    }
-  } catch (error) {
-    console.error('Error updating movie watchlist count:', error);
+// Instance methods
+Watchlist.prototype.markAsWatched = function(rating = null) {
+  this.status = 'watched';
+  this.dateWatched = new Date();
+  if (rating) {
+    this.personalRating = rating;
   }
-});
+  return this.save();
+};
 
-// Post-remove middleware to update movie watchlist count
-watchlistSchema.post('remove', async function() {
-  try {
-    const Movie = mongoose.model('Movie');
-    const movie = await Movie.findById(this.movie);
-    if (movie) {
-      const count = await mongoose.model('Watchlist').countDocuments({ movie: this.movie });
-      movie.watchlistCount = count;
-      await movie.save();
-    }
-  } catch (error) {
-    console.error('Error updating movie watchlist count:', error);
+Watchlist.prototype.updatePriority = function(priority) {
+  if (['low', 'medium', 'high'].includes(priority)) {
+    this.priority = priority;
+    return this.save();
   }
-});
+  throw new Error('Invalid priority level');
+};
 
-// Static method to get user's watchlist by status
-watchlistSchema.statics.getUserWatchlist = function(userId, status = null, options = {}) {
+// Static methods
+Watchlist.getUserWatchlist = function(userId, status = null, options = {}) {
   const {
     sortBy = 'added',
     limit = 20,
-    skip = 0
+    offset = 0
   } = options;
 
-  let query = { user: userId };
+  let whereClause = { userId: userId };
   if (status && status !== 'all') {
-    query.status = status;
+    whereClause.status = status;
   }
 
-  let sortOptions = {};
+  let order = [];
   switch (sortBy) {
-    case 'title':
-      // This requires population, handled in the query
-      sortOptions = { createdAt: -1 }; // fallback
-      break;
     case 'rating':
-      sortOptions = { personalRating: -1, createdAt: -1 };
+      order = [['personalRating', 'DESC'], ['createdAt', 'DESC']];
       break;
     case 'priority':
-      sortOptions = { priority: 1, createdAt: -1 };
+      order = [['priority', 'ASC'], ['createdAt', 'DESC']];
       break;
     case 'date_watched':
-      sortOptions = { dateWatched: -1, createdAt: -1 };
+      order = [['dateWatched', 'DESC'], ['createdAt', 'DESC']];
       break;
     case 'added':
     default:
-      sortOptions = { createdAt: -1 };
+      order = [['createdAt', 'DESC']];
       break;
   }
 
-  return this.find(query)
-    .populate({
-      path: 'movie',
-      select: 'title posterUrl releaseDate genres averageRating runtime',
-      match: { isActive: true }
-    })
-    .sort(sortOptions)
-    .skip(skip)
-    .limit(limit);
+  return this.findAll({
+    where: whereClause,
+    include: [{
+      model: require('./Movie'),
+      attributes: ['id', 'title', 'posterUrl', 'releaseDate', 'averageRating', 'runtime'],
+      where: { isActive: true }
+    }],
+    order: order,
+    offset: offset,
+    limit: limit
+  });
 };
 
-// Static method to get watchlist statistics for a user
-watchlistSchema.statics.getUserWatchlistStats = async function(userId) {
-  const stats = await this.aggregate([
-    { $match: { user: mongoose.Types.ObjectId(userId) } },
-    {
-      $group: {
-        _id: '$status',
-        count: { $sum: 1 }
-      }
-    }
-  ]);
+Watchlist.getUserWatchlistStats = async function(userId) {
+  const stats = await this.findAll({
+    where: { userId: userId },
+    attributes: [
+      'status',
+      [sequelize.fn('COUNT', sequelize.col('id')), 'count']
+    ],
+    group: ['status'],
+    raw: true
+  });
 
   const result = {
     want_to_watch: 0,
@@ -166,65 +182,31 @@ watchlistSchema.statics.getUserWatchlistStats = async function(userId) {
   };
 
   stats.forEach(stat => {
-    result[stat._id] = stat.count;
-    result.total += stat.count;
+    result[stat.status] = parseInt(stat.count);
+    result.total += parseInt(stat.count);
   });
 
   return result;
 };
 
-// Method to mark as watched
-watchlistSchema.methods.markAsWatched = function(rating = null) {
-  this.status = 'watched';
-  this.dateWatched = new Date();
-  if (rating) {
-    this.personalRating = rating;
-  }
-  return this.save();
+Watchlist.getPopularWatchlistMovies = function(limit = 10) {
+  return this.findAll({
+    attributes: [
+      'movieId',
+      [sequelize.fn('COUNT', sequelize.col('movieId')), 'count']
+    ],
+    group: ['movieId'],
+    order: [[sequelize.literal('count'), 'DESC']],
+    limit: limit,
+    include: [{
+      model: require('./Movie'),
+      attributes: ['id', 'title', 'posterUrl', 'releaseDate', 'averageRating']
+    }]
+  });
 };
 
-// Method to update priority
-watchlistSchema.methods.updatePriority = function(priority) {
-  if (['low', 'medium', 'high'].includes(priority)) {
-    this.priority = priority;
-    return this.save();
-  }
-  throw new Error('Invalid priority level');
+Watchlist.isInWatchlist = function(userId, movieId) {
+  return this.findOne({ where: { userId: userId, movieId: movieId } });
 };
 
-// Static method to get popular movies from watchlists
-watchlistSchema.statics.getPopularWatchlistMovies = function(limit = 10) {
-  return this.aggregate([
-    {
-      $group: {
-        _id: '$movie',
-        count: { $sum: 1 }
-      }
-    },
-    { $sort: { count: -1 } },
-    { $limit: limit },
-    {
-      $lookup: {
-        from: 'movies',
-        localField: '_id',
-        foreignField: '_id',
-        as: 'movie'
-      }
-    },
-    { $unwind: '$movie' },
-    {
-      $project: {
-        _id: 0,
-        movie: 1,
-        watchlistCount: '$count'
-      }
-    }
-  ]);
-};
-
-// Static method to check if movie is in user's watchlist
-watchlistSchema.statics.isInWatchlist = function(userId, movieId) {
-  return this.findOne({ user: userId, movie: movieId });
-};
-
-module.exports = mongoose.model('Watchlist', watchlistSchema);
+module.exports = Watchlist;

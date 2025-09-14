@@ -1,8 +1,8 @@
 const express = require('express');
 const { body, query, validationResult } = require('express-validator');
-const Review = require('../models/Review');
-const Movie = require('../models/Movie');
+const { Review, Movie, User } = require('../models/index');
 const { authenticate, optionalAuth } = require('../middleware/auth');
+const { Op } = require('sequelize');
 
 const router = express.Router();
 
@@ -29,10 +29,10 @@ router.get('/movie/:movieId', [
       sortBy = 'helpful'
     } = req.query;
 
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
     // Check if movie exists
-    const movie = await Movie.findById(movieId);
+    const movie = await Movie.findByPk(movieId);
     if (!movie || !movie.isActive) {
       return res.status(404).json({
         error: 'Movie not found',
@@ -40,16 +40,40 @@ router.get('/movie/:movieId', [
       });
     }
 
-    const reviews = await Review.getMovieReviews(movieId, {
-      sortBy,
-      limit: parseInt(limit),
-      skip: parseInt(skip)
-    });
+    // Build order clause
+    let orderClause = [];
+    switch (sortBy) {
+      case 'newest':
+        orderClause = [['createdAt', 'DESC']];
+        break;
+      case 'oldest':
+        orderClause = [['createdAt', 'ASC']];
+        break;
+      case 'rating_high':
+        orderClause = [['rating', 'DESC']];
+        break;
+      case 'rating_low':
+        orderClause = [['rating', 'ASC']];
+        break;
+      case 'helpful':
+      default:
+        orderClause = [['helpfulVotes', 'DESC'], ['createdAt', 'DESC']];
+    }
 
-    const totalReviews = await Review.countDocuments({
-      movie: movieId,
-      isActive: true,
-      moderationStatus: 'approved'
+    const { rows: reviews, count: totalReviews } = await Review.findAndCountAll({
+      where: {
+        movieId: movieId,
+        isActive: true,
+        moderationStatus: 'approved'
+      },
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: ['username', 'profilePicture', 'reviewCount']
+      }],
+      order: orderClause,
+      limit: parseInt(limit),
+      offset: parseInt(offset)
     });
 
     res.json({
@@ -58,18 +82,12 @@ router.get('/movie/:movieId', [
         currentPage: parseInt(page),
         totalPages: Math.ceil(totalReviews / limit),
         totalReviews,
-        hasNext: skip + reviews.length < totalReviews,
+        hasNext: offset + reviews.length < totalReviews,
         hasPrev: page > 1
       }
     });
   } catch (error) {
     console.error('Get movie reviews error:', error);
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid movie ID',
-        message: 'The provided movie ID is not valid'
-      });
-    }
     res.status(500).json({
       error: 'Server error',
       message: 'Unable to fetch reviews'
@@ -109,7 +127,7 @@ router.post('/movie/:movieId', authenticate, [
     const { rating, title, content, spoilers = false } = req.body;
 
     // Check if movie exists
-    const movie = await Movie.findById(movieId);
+    const movie = await Movie.findByPk(movieId);
     if (!movie || !movie.isActive) {
       return res.status(404).json({
         error: 'Movie not found',
@@ -119,38 +137,51 @@ router.post('/movie/:movieId', authenticate, [
 
     // Check if user already reviewed this movie
     const existingReview = await Review.findOne({
-      user: req.user._id,
-      movie: movieId
+      where: {
+        userId: req.user.id,
+        movieId: movieId
+      }
     });
 
+    let review;
     if (existingReview) {
-      return res.status(400).json({
-        error: 'Review already exists',
-        message: 'You have already reviewed this movie. Use the update endpoint to modify your review.'
+      // Update existing review
+      review = await existingReview.update({
+        rating,
+        title,
+        content,
+        spoilers,
+        isEdited: true,
+        editedAt: new Date()
+      });
+    } else {
+      // Create new review
+      review = await Review.create({
+        userId: req.user.id,
+        movieId: movieId,
+        rating,
+        title,
+        content,
+        spoilers
       });
     }
 
-    // Create new review
-    const review = new Review({
-      user: req.user._id,
-      movie: movieId,
-      rating,
-      title,
-      content,
-      spoilers
+    // Get review with user info for response
+    const reviewWithUser = await Review.findByPk(review.id, {
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: ['username', 'profilePicture', 'reviewCount']
+      }]
     });
 
-    await review.save();
-
-    // Populate user info for response
-    await review.populate('user', 'username profilePicture reviewCount');
-
     // Get updated movie statistics
-    const updatedMovie = await Movie.findById(movieId);
+    const updatedMovie = await Movie.findByPk(movieId);
     
     res.status(201).json({
-      message: 'Review submitted successfully',
-      review,
+      message: existingReview ? 'Review updated successfully' : 'Review submitted successfully',
+      review: reviewWithUser,
+      updated: !!existingReview,
       movieStats: {
         averageRating: updatedMovie.averageRating,
         totalRatings: updatedMovie.totalRatings,
@@ -159,12 +190,6 @@ router.post('/movie/:movieId', authenticate, [
     });
   } catch (error) {
     console.error('Submit review error:', error);
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid movie ID',
-        message: 'The provided movie ID is not valid'
-      });
-    }
     res.status(500).json({
       error: 'Server error',
       message: 'Unable to submit review'
@@ -206,7 +231,7 @@ router.put('/:reviewId', authenticate, [
     const reviewId = req.params.reviewId;
     const updateData = req.body;
 
-    const review = await Review.findById(reviewId);
+    const review = await Review.findByPk(reviewId);
     if (!review) {
       return res.status(404).json({
         error: 'Review not found',
@@ -215,35 +240,30 @@ router.put('/:reviewId', authenticate, [
     }
 
     // Check if user owns this review or is admin
-    if (review.user.toString() !== req.user._id.toString() && !req.user.isAdmin) {
+    if (review.userId !== req.user.id && !req.user.isAdmin) {
       return res.status(403).json({
         error: 'Access denied',
         message: 'You can only edit your own reviews'
       });
     }
 
-    // Update review fields
-    Object.keys(updateData).forEach(key => {
-      if (updateData[key] !== undefined) {
-        review[key] = updateData[key];
-      }
-    });
+    await review.update(updateData);
 
-    await review.save();
-    await review.populate('user', 'username profilePicture reviewCount');
+    // Get updated review with user info
+    const updatedReview = await Review.findByPk(reviewId, {
+      include: [{
+        model: User,
+        as: 'user',
+        attributes: ['username', 'profilePicture', 'reviewCount']
+      }]
+    });
 
     res.json({
       message: 'Review updated successfully',
-      review
+      review: updatedReview
     });
   } catch (error) {
     console.error('Update review error:', error);
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid review ID',
-        message: 'The provided review ID is not valid'
-      });
-    }
     res.status(500).json({
       error: 'Server error',
       message: 'Unable to update review'
@@ -256,7 +276,7 @@ router.delete('/:reviewId', authenticate, async (req, res) => {
   try {
     const reviewId = req.params.reviewId;
 
-    const review = await Review.findById(reviewId);
+    const review = await Review.findByPk(reviewId);
     if (!review) {
       return res.status(404).json({
         error: 'Review not found',
@@ -265,7 +285,7 @@ router.delete('/:reviewId', authenticate, async (req, res) => {
     }
 
     // Check if user owns this review or is admin
-    if (review.user.toString() !== req.user._id.toString() && !req.user.isAdmin) {
+    if (review.userId !== req.user.id && !req.user.isAdmin) {
       return res.status(403).json({
         error: 'Access denied',
         message: 'You can only delete your own reviews'
@@ -273,20 +293,13 @@ router.delete('/:reviewId', authenticate, async (req, res) => {
     }
 
     // Soft delete by setting isActive to false
-    review.isActive = false;
-    await review.save();
+    await review.update({ isActive: false });
 
     res.json({
       message: 'Review deleted successfully'
     });
   } catch (error) {
     console.error('Delete review error:', error);
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid review ID',
-        message: 'The provided review ID is not valid'
-      });
-    }
     res.status(500).json({
       error: 'Server error',
       message: 'Unable to delete review'
@@ -299,7 +312,7 @@ router.post('/:reviewId/helpful', authenticate, async (req, res) => {
   try {
     const reviewId = req.params.reviewId;
 
-    const review = await Review.findById(reviewId);
+    const review = await Review.findByPk(reviewId);
     if (!review || !review.isActive) {
       return res.status(404).json({
         error: 'Review not found',
@@ -308,28 +321,23 @@ router.post('/:reviewId/helpful', authenticate, async (req, res) => {
     }
 
     // Users cannot mark their own reviews as helpful
-    if (review.user.toString() === req.user._id.toString()) {
+    if (review.userId === req.user.id) {
       return res.status(400).json({
         error: 'Invalid action',
         message: 'You cannot mark your own review as helpful'
       });
     }
 
-    await review.markHelpful();
+    // Increment helpful votes
+    await review.increment(['helpfulVotes', 'totalVotes']);
 
     res.json({
       message: 'Review marked as helpful',
-      helpfulVotes: review.helpfulVotes,
-      totalVotes: review.totalVotes
+      helpfulVotes: review.helpfulVotes + 1,
+      totalVotes: review.totalVotes + 1
     });
   } catch (error) {
     console.error('Mark helpful error:', error);
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid review ID',
-        message: 'The provided review ID is not valid'
-      });
-    }
     res.status(500).json({
       error: 'Server error',
       message: 'Unable to mark review as helpful'
@@ -342,7 +350,7 @@ router.post('/:reviewId/not-helpful', authenticate, async (req, res) => {
   try {
     const reviewId = req.params.reviewId;
 
-    const review = await Review.findById(reviewId);
+    const review = await Review.findByPk(reviewId);
     if (!review || !review.isActive) {
       return res.status(404).json({
         error: 'Review not found',
@@ -351,28 +359,23 @@ router.post('/:reviewId/not-helpful', authenticate, async (req, res) => {
     }
 
     // Users cannot vote on their own reviews
-    if (review.user.toString() === req.user._id.toString()) {
+    if (review.userId === req.user.id) {
       return res.status(400).json({
         error: 'Invalid action',
         message: 'You cannot vote on your own review'
       });
     }
 
-    await review.markNotHelpful();
+    // Increment only total votes
+    await review.increment('totalVotes');
 
     res.json({
       message: 'Review marked as not helpful',
       helpfulVotes: review.helpfulVotes,
-      totalVotes: review.totalVotes
+      totalVotes: review.totalVotes + 1
     });
   } catch (error) {
     console.error('Mark not helpful error:', error);
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid review ID',
-        message: 'The provided review ID is not valid'
-      });
-    }
     res.status(500).json({
       error: 'Server error',
       message: 'Unable to mark review as not helpful'
@@ -399,7 +402,7 @@ router.post('/:reviewId/flag', authenticate, [
     const reviewId = req.params.reviewId;
     const { reason } = req.body;
 
-    const review = await Review.findById(reviewId);
+    const review = await Review.findByPk(reviewId);
     if (!review || !review.isActive) {
       return res.status(404).json({
         error: 'Review not found',
@@ -408,14 +411,18 @@ router.post('/:reviewId/flag', authenticate, [
     }
 
     // Users cannot flag their own reviews
-    if (review.user.toString() === req.user._id.toString()) {
+    if (review.userId === req.user.id) {
       return res.status(400).json({
         error: 'Invalid action',
         message: 'You cannot flag your own review'
       });
     }
 
-    await review.flag(reason);
+    // Update moderation status to flagged
+    await review.update({ 
+      moderationStatus: 'flagged',
+      flagReason: reason
+    });
 
     res.json({
       message: 'Review flagged successfully',
@@ -423,12 +430,6 @@ router.post('/:reviewId/flag', authenticate, [
     });
   } catch (error) {
     console.error('Flag review error:', error);
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid review ID',
-        message: 'The provided review ID is not valid'
-      });
-    }
     res.status(500).json({
       error: 'Server error',
       message: 'Unable to flag review'
@@ -439,8 +440,34 @@ router.post('/:reviewId/flag', authenticate, [
 // Get review statistics
 router.get('/stats', async (req, res) => {
   try {
-    const stats = await Review.getReviewStats();
-    res.json(stats);
+    const sequelize = require('../config/database');
+    
+    const [results] = await sequelize.query(`
+      SELECT 
+        COUNT(*) as totalReviews,
+        AVG(rating) as averageRating,
+        COUNT(CASE WHEN rating = 5 THEN 1 END) as fiveStars,
+        COUNT(CASE WHEN rating = 4 THEN 1 END) as fourStars,
+        COUNT(CASE WHEN rating = 3 THEN 1 END) as threeStars,
+        COUNT(CASE WHEN rating = 2 THEN 1 END) as twoStars,
+        COUNT(CASE WHEN rating = 1 THEN 1 END) as oneStar
+      FROM Reviews 
+      WHERE isActive = true AND moderationStatus = 'approved'
+    `);
+
+    const stats = results[0];
+    
+    res.json({
+      totalReviews: parseInt(stats.totalReviews),
+      averageRating: parseFloat(stats.averageRating) || 0,
+      ratingDistribution: {
+        five: parseInt(stats.fiveStars),
+        four: parseInt(stats.fourStars),
+        three: parseInt(stats.threeStars),
+        two: parseInt(stats.twoStars),
+        one: parseInt(stats.oneStar)
+      }
+    });
   } catch (error) {
     console.error('Get review stats error:', error);
     res.status(500).json({

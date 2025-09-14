@@ -24,7 +24,7 @@ const persistConfig = {
   key: 'movie-review-platform',
   version: 1,
   storage,
-  whitelist: ['auth'] // Only persist auth state
+  whitelist: ['auth', 'theme'] // Persist auth and theme state
 };
 
 const persistedReducer = persistReducer(persistConfig, rootReducer);

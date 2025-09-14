@@ -1,291 +1,353 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-const movieSchema = new mongoose.Schema({
-  title: {
-    type: String,
-    required: [true, 'Movie title is required'],
-    trim: true,
-    maxlength: [200, 'Title cannot exceed 200 characters']
-  },
-  originalTitle: {
-    type: String,
-    trim: true
-  },
-  overview: {
-    type: String,
-    required: [true, 'Movie overview is required'],
-    maxlength: [2000, 'Overview cannot exceed 2000 characters']
-  },
-  genres: [{
-    type: String,
-    enum: ['Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Family', 'Fantasy', 'History', 'Horror', 'Music', 'Mystery', 'Romance', 'Science Fiction', 'TV Movie', 'Thriller', 'War', 'Western']
-  }],
-  releaseDate: {
-    type: Date,
-    required: [true, 'Release date is required']
-  },
-  runtime: {
-    type: Number,
-    min: [1, 'Runtime must be at least 1 minute']
-  },
-  director: {
-    type: String,
-    required: false,
-    trim: true,
-    default: 'Unknown Director'
-  },
-  cast: [{
-    name: {
-      type: String,
-      required: true,
-      trim: true
-    },
-    character: {
-      type: String,
-      trim: true
-    },
-    profilePath: String
-  }],
-  posterUrl: {
-    type: String,
-    default: ''
-  },
-  backdropUrl: {
-    type: String,
-    default: ''
-  },
-  trailerUrl: {
-    type: String,
-    default: ''
-  },
-  imdbId: {
-    type: String,
-    unique: true,
-    sparse: true
+const Movie = sequelize.define('Movie', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
   },
   tmdbId: {
-    type: Number,
+    type: DataTypes.INTEGER,
     unique: true,
-    sparse: true
+    allowNull: true,
+    comment: 'TMDB API movie ID for external reference'
+  },
+  title: {
+    type: DataTypes.STRING(200),
+    allowNull: false,
+    validate: {
+      notEmpty: true,
+      len: [1, 200]
+    }
+  },
+  originalTitle: {
+    type: DataTypes.STRING(200)
+  },
+  overview: {
+    type: DataTypes.TEXT,
+    allowNull: false,
+    validate: {
+      notEmpty: true,
+      len: [1, 2000]
+    }
+  },
+  releaseDate: {
+    type: DataTypes.DATEONLY,
+    allowNull: false
+  },
+  runtime: {
+    type: DataTypes.INTEGER,
+    validate: {
+      min: 1
+    }
+  },
+  director: {
+    type: DataTypes.STRING(100),
+    defaultValue: 'Unknown Director'
+  },
+  posterUrl: {
+    type: DataTypes.TEXT,
+    defaultValue: ''
+  },
+  backdropUrl: {
+    type: DataTypes.TEXT,
+    defaultValue: ''
+  },
+  trailerUrl: {
+    type: DataTypes.TEXT,
+    defaultValue: ''
+  },
+  imdbId: {
+    type: DataTypes.STRING(20),
+    unique: true
+  },
+  tmdbId: {
+    type: DataTypes.INTEGER,
+    unique: true
   },
   budget: {
-    type: Number,
-    min: 0
+    type: DataTypes.BIGINT,
+    validate: {
+      min: 0
+    }
   },
   revenue: {
-    type: Number,
-    min: 0
+    type: DataTypes.BIGINT,
+    validate: {
+      min: 0
+    }
   },
-  language: {
-    type: String,
-    default: 'en'
-  },
-  country: {
-    type: String,
-    default: 'US'
-  },
-  certification: {
-    type: String,
-    enum: ['G', 'PG', 'PG-13', 'R', 'NC-17', 'NR'],
-    default: 'NR'
-  },
-  status: {
-    type: String,
-    enum: ['Released', 'In Production', 'Post Production', 'Planned', 'Canceled'],
-    default: 'Released'
-  },
-  // Rating statistics
-  averageRating: {
-    type: Number,
-    default: 0,
-    min: 0,
-    max: 5
-  },
-  totalRatings: {
-    type: Number,
-    default: 0,
-    min: 0
-  },
-  ratingDistribution: {
-    five: { type: Number, default: 0 },
-    four: { type: Number, default: 0 },
-    three: { type: Number, default: 0 },
-    two: { type: Number, default: 0 },
-    one: { type: Number, default: 0 }
-  },
-  // Popularity and view metrics
-  popularity: {
-    type: Number,
-    default: 0
-  },
-  viewCount: {
-    type: Number,
-    default: 0
-  },
-  watchlistCount: {
-    type: Number,
-    default: 0
-  },
-  // Admin fields
-  isActive: {
-    type: Boolean,
-    default: true
-  },
-  createdBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User'
-  }
-}, {
-  timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
-
-// Indexes for better query performance
-movieSchema.index({ title: 'text', overview: 'text' });
-movieSchema.index({ genres: 1 });
-movieSchema.index({ releaseDate: -1 });
-movieSchema.index({ averageRating: -1 });
-movieSchema.index({ popularity: -1 });
-movieSchema.index({ createdAt: -1 });
-movieSchema.index({ tmdbId: 1 });
-movieSchema.index({ imdbId: 1 });
-
-// Virtual for reviews
-movieSchema.virtual('reviews', {
-  ref: 'Review',
-  localField: '_id',
-  foreignField: 'movie'
-});
-
-// Virtual for year from release date
-movieSchema.virtual('year').get(function() {
-  return this.releaseDate ? this.releaseDate.getFullYear() : null;
-});
-
-// Method to update rating statistics
-movieSchema.methods.updateRatingStats = async function() {
-  const Review = mongoose.model('Review');
-  
-  const stats = await Review.aggregate([
-    { $match: { movie: this._id } },
-    {
-      $group: {
-        _id: null,
-        averageRating: { $avg: '$rating' },
-        totalRatings: { $sum: 1 },
-        ratings: { $push: '$rating' }
+  genres: {
+    type: DataTypes.TEXT,
+    defaultValue: '',
+    get() {
+      const rawValue = this.getDataValue('genres');
+      return rawValue ? rawValue.split(',').map(g => g.trim()) : [];
+    },
+    set(value) {
+      if (Array.isArray(value)) {
+        this.setDataValue('genres', value.join(', '));
+      } else {
+        this.setDataValue('genres', value || '');
       }
     }
-  ]);
+  },
+  cast: {
+    type: DataTypes.TEXT,
+    defaultValue: ''
+  },
+  language: {
+    type: DataTypes.STRING(10),
+    defaultValue: 'en'
+  },
+  country: {
+    type: DataTypes.STRING(10),
+    defaultValue: 'US'
+  },
+  certification: {
+    type: DataTypes.ENUM('G', 'PG', 'PG-13', 'R', 'NC-17', 'NR'),
+    defaultValue: 'NR'
+  },
+  status: {
+    type: DataTypes.ENUM('Released', 'In Production', 'Post Production', 'Planned', 'Canceled'),
+    defaultValue: 'Released'
+  },
+  averageRating: {
+    type: DataTypes.DECIMAL(2, 1),
+    defaultValue: 0,
+    validate: {
+      min: 0,
+      max: 5
+    }
+  },
+  totalRatings: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    validate: {
+      min: 0
+    }
+  },
+  ratingFive: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  ratingFour: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  ratingThree: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  ratingTwo: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  ratingOne: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  popularity: {
+    type: DataTypes.FLOAT,
+    defaultValue: 0
+  },
+  viewCount: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  watchlistCount: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  isActive: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: true
+  },
+  createdBy: {
+    type: DataTypes.INTEGER,
+    references: {
+      model: 'users',
+      key: 'id'
+    }
+  }
+}, {
+  tableName: 'movies',
+  timestamps: true,
+  indexes: [
+    {
+      fields: ['title']
+    },
+    {
+      fields: ['releaseDate']
+    },
+    {
+      fields: ['averageRating']
+    },
+    {
+      fields: ['popularity']
+    },
+    {
+      fields: ['tmdbId']
+    },
+    {
+      fields: ['imdbId']
+    }
+  ]
+});
 
-  if (stats.length > 0) {
+// Virtual field for year
+Movie.prototype.getYear = function() {
+  return this.releaseDate ? new Date(this.releaseDate).getFullYear() : null;
+};
+
+// Method to update rating statistics
+Movie.prototype.updateRatingStats = async function() {
+  const Review = require('./Review');
+  const { Op } = require('sequelize');
+
+  const stats = await Review.findAll({
+    where: { movieId: this.id },
+    attributes: [
+      [sequelize.fn('AVG', sequelize.col('rating')), 'avgRating'],
+      [sequelize.fn('COUNT', sequelize.col('id')), 'totalRatings'],
+      [sequelize.fn('SUM', sequelize.literal('CASE WHEN rating = 5 THEN 1 ELSE 0 END')), 'five'],
+      [sequelize.fn('SUM', sequelize.literal('CASE WHEN rating = 4 THEN 1 ELSE 0 END')), 'four'],
+      [sequelize.fn('SUM', sequelize.literal('CASE WHEN rating = 3 THEN 1 ELSE 0 END')), 'three'],
+      [sequelize.fn('SUM', sequelize.literal('CASE WHEN rating = 2 THEN 1 ELSE 0 END')), 'two'],
+      [sequelize.fn('SUM', sequelize.literal('CASE WHEN rating = 1 THEN 1 ELSE 0 END')), 'one']
+    ],
+    raw: true
+  });
+
+  if (stats.length > 0 && stats[0].totalRatings > 0) {
     const stat = stats[0];
-    this.averageRating = Math.round(stat.averageRating * 10) / 10;
+    this.averageRating = Math.round(stat.avgRating * 10) / 10;
     this.totalRatings = stat.totalRatings;
-
-    // Update rating distribution
-    const distribution = { five: 0, four: 0, three: 0, two: 0, one: 0 };
-    stat.ratings.forEach(rating => {
-      if (rating === 5) distribution.five++;
-      else if (rating === 4) distribution.four++;
-      else if (rating === 3) distribution.three++;
-      else if (rating === 2) distribution.two++;
-      else if (rating === 1) distribution.one++;
-    });
-    
-    this.ratingDistribution = distribution;
+    this.ratingFive = stat.five || 0;
+    this.ratingFour = stat.four || 0;
+    this.ratingThree = stat.three || 0;
+    this.ratingTwo = stat.two || 0;
+    this.ratingOne = stat.one || 0;
   } else {
     this.averageRating = 0;
     this.totalRatings = 0;
-    this.ratingDistribution = { five: 0, four: 0, three: 0, two: 0, one: 0 };
+    this.ratingFive = 0;
+    this.ratingFour = 0;
+    this.ratingThree = 0;
+    this.ratingTwo = 0;
+    this.ratingOne = 0;
   }
 
-  return this.save();
+  return await this.save();
 };
 
 // Method to increment view count
-movieSchema.methods.incrementViewCount = function() {
+Movie.prototype.incrementViewCount = function() {
   this.viewCount++;
   return this.save();
 };
 
 // Static method to find movies by genre
-movieSchema.statics.findByGenre = function(genre) {
-  return this.find({ genres: genre, isActive: true });
+Movie.findByGenre = async function(genre) {
+  const MovieGenre = require('./MovieGenre');
+  return await this.findAll({
+    include: [{
+      model: MovieGenre,
+      where: { genre: genre }
+    }],
+    where: { isActive: true }
+  });
 };
 
 // Static method to find popular movies
-movieSchema.statics.findPopular = function(limit = 10) {
-  return this.find({ isActive: true })
-    .sort({ popularity: -1, averageRating: -1 })
-    .limit(limit);
+Movie.findPopular = function(limit = 10) {
+  return this.findAll({
+    where: { isActive: true },
+    order: [['popularity', 'DESC'], ['averageRating', 'DESC']],
+    limit: limit
+  });
 };
 
 // Static method to find recent movies
-movieSchema.statics.findRecent = function(limit = 10) {
-  return this.find({ isActive: true })
-    .sort({ releaseDate: -1 })
-    .limit(limit);
+Movie.findRecent = function(limit = 10) {
+  return this.findAll({
+    where: { isActive: true },
+    order: [['releaseDate', 'DESC']],
+    limit: limit
+  });
 };
 
 // Static method to search movies
-movieSchema.statics.searchMovies = function(query, options = {}) {
+Movie.searchMovies = async function(query, options = {}) {
   const {
     genre,
     year,
     minRating,
     sortBy = 'relevance',
     limit = 20,
-    skip = 0
+    offset = 0
   } = options;
 
-  let searchQuery = { isActive: true };
+  const { Op } = require('sequelize');
+  let whereClause = { isActive: true };
+  let include = [];
 
   // Text search
   if (query) {
-    searchQuery.$text = { $search: query };
-  }
-
-  // Genre filter
-  if (genre && genre !== 'all') {
-    searchQuery.genres = genre;
+    whereClause[Op.or] = [
+      { title: { [Op.like]: `%${query}%` } },
+      { overview: { [Op.like]: `%${query}%` } }
+    ];
   }
 
   // Year filter
   if (year) {
-    const startDate = new Date(year, 0, 1);
-    const endDate = new Date(year, 11, 31);
-    searchQuery.releaseDate = { $gte: startDate, $lte: endDate };
+    whereClause.releaseDate = {
+      [Op.between]: [`${year}-01-01`, `${year}-12-31`]
+    };
   }
 
   // Rating filter
   if (minRating) {
-    searchQuery.averageRating = { $gte: minRating };
+    whereClause.averageRating = { [Op.gte]: minRating };
   }
 
-  let sortOptions = {};
+  // Genre filter
+  if (genre && genre !== 'all') {
+    const MovieGenre = require('./MovieGenre');
+    include.push({
+      model: MovieGenre,
+      where: { genre: genre },
+      required: true
+    });
+  }
+
+  let order = [];
   switch (sortBy) {
     case 'rating':
-      sortOptions = { averageRating: -1, totalRatings: -1 };
+      order = [['averageRating', 'DESC'], ['totalRatings', 'DESC']];
       break;
     case 'year':
-      sortOptions = { releaseDate: -1 };
+      order = [['releaseDate', 'DESC']];
       break;
     case 'popularity':
-      sortOptions = { popularity: -1 };
+      order = [['popularity', 'DESC']];
       break;
     case 'title':
-      sortOptions = { title: 1 };
+      order = [['title', 'ASC']];
       break;
     default:
-      sortOptions = query ? { score: { $meta: 'textScore' } } : { createdAt: -1 };
+      order = [['createdAt', 'DESC']];
   }
 
-  return this.find(searchQuery)
-    .sort(sortOptions)
-    .skip(skip)
-    .limit(limit);
+  return await this.findAll({
+    where: whereClause,
+    include: include,
+    order: order,
+    offset: offset,
+    limit: limit
+  });
 };
 
-module.exports = mongoose.model('Movie', movieSchema);
+module.exports = Movie;

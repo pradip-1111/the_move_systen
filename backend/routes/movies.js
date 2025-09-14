@@ -1,8 +1,8 @@
 const express = require('express');
 const { body, query, validationResult } = require('express-validator');
-const Movie = require('../models/Movie');
-const Review = require('../models/Review');
+const { Movie, Review, Watchlist } = require('../models/index');
 const { authenticate, requireAdmin, optionalAuth } = require('../middleware/auth');
+const { Op } = require('sequelize');
 
 const router = express.Router();
 
@@ -36,76 +36,59 @@ router.get('/', [
       search
     } = req.query;
 
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
-    let movies;
-    let total;
+    let whereClause = { isActive: true };
+    let orderClause = [];
+
+    // Build where clause
+    if (genre && genre !== 'all') {
+      whereClause.genres = { [Op.like]: `%${genre}%` };
+    }
+    
+    if (year) {
+      const startDate = new Date(year, 0, 1);
+      const endDate = new Date(year, 11, 31);
+      whereClause.releaseDate = { [Op.between]: [startDate, endDate] };
+    }
+    
+    if (minRating) {
+      whereClause.averageRating = { [Op.gte]: parseFloat(minRating) };
+    }
 
     if (search) {
-      movies = await Movie.searchMovies(search, {
-        genre,
-        year: parseInt(year),
-        minRating: parseFloat(minRating),
-        sortBy,
-        limit: parseInt(limit),
-        skip: parseInt(skip)
-      });
-      
-      // Count total for search
-      const countQuery = { isActive: true };
-      if (search) countQuery.$text = { $search: search };
-      if (genre && genre !== 'all') countQuery.genres = genre;
-      if (year) {
-        const startDate = new Date(year, 0, 1);
-        const endDate = new Date(year, 11, 31);
-        countQuery.releaseDate = { $gte: startDate, $lte: endDate };
-      }
-      if (minRating) countQuery.averageRating = { $gte: minRating };
-      
-      total = await Movie.countDocuments(countQuery);
-    } else {
-      let query = { isActive: true };
-      
-      if (genre && genre !== 'all') {
-        query.genres = genre;
-      }
-      
-      if (year) {
-        const startDate = new Date(year, 0, 1);
-        const endDate = new Date(year, 11, 31);
-        query.releaseDate = { $gte: startDate, $lte: endDate };
-      }
-      
-      if (minRating) {
-        query.averageRating = { $gte: minRating };
-      }
-
-      let sortOptions = {};
-      switch (sortBy) {
-        case 'rating':
-          sortOptions = { averageRating: -1, totalRatings: -1 };
-          break;
-        case 'year':
-          sortOptions = { releaseDate: -1 };
-          break;
-        case 'popularity':
-          sortOptions = { popularity: -1 };
-          break;
-        case 'title':
-          sortOptions = { title: 1 };
-          break;
-        default:
-          sortOptions = { createdAt: -1 };
-      }
-
-      movies = await Movie.find(query)
-        .sort(sortOptions)
-        .skip(parseInt(skip))
-        .limit(parseInt(limit))
-        .select('-__v');
-
-      total = await Movie.countDocuments(query);
+      whereClause[Op.or] = [
+        { title: { [Op.like]: `%${search}%` } },
+        { overview: { [Op.like]: `%${search}%` } },
+        { director: { [Op.like]: `%${search}%` } }
+      ];
     }
+
+    // Build order clause
+    switch (sortBy) {
+      case 'rating':
+        orderClause = [['averageRating', 'DESC'], ['totalRatings', 'DESC']];
+        break;
+      case 'year':
+        orderClause = [['releaseDate', 'DESC']];
+        break;
+      case 'popularity':
+        orderClause = [['popularity', 'DESC']];
+        break;
+      case 'title':
+        orderClause = [['title', 'ASC']];
+        break;
+      default:
+        orderClause = [['createdAt', 'DESC']];
+    }
+
+    const { rows: movies, count: total } = await Movie.findAndCountAll({
+      where: whereClause,
+      order: orderClause,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      attributes: { exclude: ['createdAt', 'updatedAt'] }
+    });
 
     res.json({
       movies,
@@ -113,7 +96,7 @@ router.get('/', [
         currentPage: parseInt(page),
         totalPages: Math.ceil(total / limit),
         totalMovies: total,
-        hasNext: skip + movies.length < total,
+        hasNext: offset + movies.length < total,
         hasPrev: page > 1
       }
     });
@@ -130,12 +113,27 @@ router.get('/', [
 router.get('/featured', async (req, res) => {
   try {
     const [popular, recent, topRated] = await Promise.all([
-      Movie.findPopular(8),
-      Movie.findRecent(8),
-      Movie.find({ isActive: true, totalRatings: { $gte: 10 } })
-        .sort({ averageRating: -1, totalRatings: -1 })
-        .limit(8)
-        .select('-__v')
+      Movie.findAll({
+        where: { isActive: true },
+        order: [['popularity', 'DESC']],
+        limit: 8,
+        attributes: { exclude: ['createdAt', 'updatedAt'] }
+      }),
+      Movie.findAll({
+        where: { isActive: true },
+        order: [['releaseDate', 'DESC']],
+        limit: 8,
+        attributes: { exclude: ['createdAt', 'updatedAt'] }
+      }),
+      Movie.findAll({
+        where: { 
+          isActive: true,
+          totalRatings: { [Op.gte]: 10 }
+        },
+        order: [['averageRating', 'DESC'], ['totalRatings', 'DESC']],
+        limit: 8,
+        attributes: { exclude: ['createdAt', 'updatedAt'] }
+      })
     ]);
 
     res.json({
@@ -157,11 +155,17 @@ router.get('/:id', optionalAuth, async (req, res) => {
   try {
     const movieId = req.params.id;
     
-    const movie = await Movie.findById(movieId)
-      .populate('reviews', 'rating title content user createdAt helpfulVotes totalVotes', null, {
+    const movie = await Movie.findByPk(movieId, {
+      include: [{
+        model: Review,
+        as: 'reviews',
+        attributes: ['id', 'rating', 'title', 'content', 'userId', 'createdAt', 'helpfulVotes', 'totalVotes'],
+        where: { isActive: true, moderationStatus: 'approved' },
         limit: 5,
-        sort: { helpfulVotes: -1, createdAt: -1 }
-      });
+        order: [['helpfulVotes', 'DESC'], ['createdAt', 'DESC']],
+        required: false
+      }]
+    });
 
     if (!movie || !movie.isActive) {
       return res.status(404).json({
@@ -171,25 +175,33 @@ router.get('/:id', optionalAuth, async (req, res) => {
     }
 
     // Increment view count
-    await movie.incrementViewCount();
+    await movie.increment('viewCount');
 
     // Check if user has this movie in watchlist (if authenticated)
     let inWatchlist = false;
     let userReview = null;
     
     if (req.user) {
-      const Watchlist = require('../models/Watchlist');
       const watchlistEntry = await Watchlist.findOne({
-        user: req.user._id,
-        movie: movieId
+        where: {
+          userId: req.user.id,
+          movieId: movieId
+        }
       });
       inWatchlist = !!watchlistEntry;
 
       // Get user's review if exists
       userReview = await Review.findOne({
-        user: req.user._id,
-        movie: movieId
-      }).populate('user', 'username profilePicture');
+        where: {
+          userId: req.user.id,
+          movieId: movieId
+        },
+        include: [{
+          model: require('../models/User'),
+          as: 'user',
+          attributes: ['username', 'profilePicture']
+        }]
+      });
     }
 
     res.json({
@@ -199,12 +211,6 @@ router.get('/:id', optionalAuth, async (req, res) => {
     });
   } catch (error) {
     console.error('Get movie error:', error);
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid movie ID',
-        message: 'The provided movie ID is not valid'
-      });
-    }
     res.status(500).json({
       error: 'Server error',
       message: 'Unable to fetch movie'
@@ -235,12 +241,14 @@ router.post('/', authenticate, requireAdmin, [
 
     const movieData = {
       ...req.body,
-      createdBy: req.user._id
+      createdBy: req.user.id
     };
 
     // Check for duplicate TMDB ID
     if (movieData.tmdbId) {
-      const existingMovie = await Movie.findOne({ tmdbId: movieData.tmdbId });
+      const existingMovie = await Movie.findOne({ 
+        where: { tmdbId: movieData.tmdbId } 
+      });
       if (existingMovie) {
         return res.status(400).json({
           error: 'Movie already exists',
@@ -249,8 +257,7 @@ router.post('/', authenticate, requireAdmin, [
       }
     }
 
-    const movie = new Movie(movieData);
-    await movie.save();
+    const movie = await Movie.create(movieData);
 
     res.status(201).json({
       message: 'Movie added successfully',
@@ -287,7 +294,7 @@ router.put('/:id', authenticate, requireAdmin, [
     const movieId = req.params.id;
     const updateData = req.body;
 
-    const movie = await Movie.findById(movieId);
+    const movie = await Movie.findByPk(movieId);
     if (!movie) {
       return res.status(404).json({
         error: 'Movie not found',
@@ -295,14 +302,7 @@ router.put('/:id', authenticate, requireAdmin, [
       });
     }
 
-    // Update fields
-    Object.keys(updateData).forEach(key => {
-      if (updateData[key] !== undefined) {
-        movie[key] = updateData[key];
-      }
-    });
-
-    await movie.save();
+    await movie.update(updateData);
 
     res.json({
       message: 'Movie updated successfully',
@@ -310,12 +310,6 @@ router.put('/:id', authenticate, requireAdmin, [
     });
   } catch (error) {
     console.error('Update movie error:', error);
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid movie ID',
-        message: 'The provided movie ID is not valid'
-      });
-    }
     res.status(500).json({
       error: 'Server error',
       message: 'Unable to update movie'
@@ -328,7 +322,7 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
   try {
     const movieId = req.params.id;
 
-    const movie = await Movie.findById(movieId);
+    const movie = await Movie.findByPk(movieId);
     if (!movie) {
       return res.status(404).json({
         error: 'Movie not found',
@@ -337,20 +331,13 @@ router.delete('/:id', authenticate, requireAdmin, async (req, res) => {
     }
 
     // Soft delete by setting isActive to false
-    movie.isActive = false;
-    await movie.save();
+    await movie.update({ isActive: false });
 
     res.json({
       message: 'Movie deleted successfully'
     });
   } catch (error) {
     console.error('Delete movie error:', error);
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid movie ID',
-        message: 'The provided movie ID is not valid'
-      });
-    }
     res.status(500).json({
       error: 'Server error',
       message: 'Unable to delete movie'

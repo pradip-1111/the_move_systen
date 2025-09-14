@@ -1,5 +1,5 @@
 const jwt = require('jsonwebtoken');
-const User = require('../models/User');
+const { User } = require('../models/index');
 
 // Middleware to verify JWT token
 const authenticate = async (req, res, next) => {
@@ -16,7 +16,7 @@ const authenticate = async (req, res, next) => {
     const token = authHeader.substring(7);
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    const user = await User.findById(decoded.userId);
+    const user = await User.findByPk(decoded.userId);
     if (!user || !user.isActive) {
       return res.status(401).json({
         error: 'Access denied',
@@ -25,7 +25,7 @@ const authenticate = async (req, res, next) => {
     }
 
     req.user = user;
-    req.userId = user._id;
+    req.userId = user.id;
     next();
   } catch (error) {
     if (error.name === 'JsonWebTokenError') {
@@ -72,10 +72,10 @@ const optionalAuth = async (req, res, next) => {
     const token = authHeader.substring(7);
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
     
-    const user = await User.findById(decoded.userId);
+    const user = await User.findByPk(decoded.userId);
     if (user && user.isActive) {
       req.user = user;
-      req.userId = user._id;
+      req.userId = user.id;
     }
   } catch (error) {
     // Ignore errors in optional auth
@@ -141,7 +141,7 @@ const generateToken = (userId) => {
   return jwt.sign(
     { userId },
     process.env.JWT_SECRET,
-    { expiresIn: process.env.JWT_EXPIRES_IN || '7d' }
+    { expiresIn: process.env.JWT_EXPIRES_IN || process.env.JWT_EXPIRE || '7d' }
   );
 };
 

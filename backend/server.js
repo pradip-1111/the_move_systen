@@ -1,9 +1,9 @@
 const express = require('express');
-const mongoose = require('mongoose');
 const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const rateLimit = require('express-rate-limit');
+const { initializeDatabase } = require('./models/index');
 require('dotenv').config();
 
 const app = express();
@@ -25,9 +25,11 @@ const limiter = rateLimit({
 });
 app.use('/api/', limiter);
 
-// CORS configuration
+// CORS configuration - more permissive for development
 app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:3000',
+  origin: ['http://localhost:3000', 'http://localhost:3001'],
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
   credentials: true
 }));
 
@@ -35,55 +37,37 @@ app.use(cors({
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// MongoDB connection with graceful error handling
-let mongoConnected = false;
+// SQLite database connection
+let sqliteConnected = false;
 
-const connectMongoDB = async () => {
+const initializeSQLite = async () => {
   try {
-    await mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/movie_review_platform', {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000, // Timeout after 5 seconds instead of default 30s
-    });
-    console.log('✅ Connected to MongoDB');
-    mongoConnected = true;
-  } catch (error) {
-    console.error('❌ MongoDB connection error:', error.message);
-    console.log('ℹ️  The server will continue running without database functionality.');
-    console.log('ℹ️  To enable full functionality, please install and start MongoDB:');
-    console.log('   • Download from: https://www.mongodb.com/try/download/community');
-    console.log('   • Or install with: npm install -g mongodb-memory-server');
-    console.log('   • Then restart the application');
-    mongoConnected = false;
-  }
-};
-
-// Initialize database and populate with movie data
-const initializeDatabase = async () => {
-  await connectMongoDB();
-  
-  if (mongoConnected) {
-    try {
-      const tmdbService = require('./services/tmdbService');
-      await tmdbService.populateDatabase();
-    } catch (error) {
-      console.error('Error populating database:', error.message);
+    console.log('🔄 Initializing SQLite database...');
+    const success = await initializeDatabase();
+    if (success) {
+      console.log('✅ SQLite database initialized successfully');
+      sqliteConnected = true;
+    } else {
+      console.error('❌ Failed to initialize SQLite database');
+      sqliteConnected = false;
     }
+  } catch (error) {
+    console.error('❌ SQLite database initialization error:', error.message);
+    console.log('ℹ️  The server will continue running without database functionality.');
+    sqliteConnected = false;
   }
 };
 
-initializeDatabase();
+// Initialize database
+initializeSQLite();
 
-// Middleware to check MongoDB connection
+// Middleware to check SQLite connection
 const requireDatabase = (req, res, next) => {
-  if (!mongoConnected) {
+  if (!sqliteConnected) {
     return res.status(503).json({
       error: 'Database Unavailable',
-      message: 'MongoDB is not connected. Please install and start MongoDB to use this feature.',
-      installInstructions: {
-        download: 'https://www.mongodb.com/try/download/community',
-        npmPackage: 'mongodb-memory-server for development'
-      }
+      message: 'SQLite database is not connected. Please check the database configuration.',
+      note: 'The database file will be created automatically when the connection is established.'
     });
   }
   next();
@@ -95,6 +79,7 @@ const movieRoutes = require('./routes/movies');
 const reviewRoutes = require('./routes/reviews');
 const userRoutes = require('./routes/users');
 const watchlistRoutes = require('./routes/watchlist');
+const tmdbRoutes = require('./routes/tmdb');
 
 // Routes
 app.use('/api/auth', requireDatabase, authRoutes);
@@ -102,17 +87,19 @@ app.use('/api/movies', requireDatabase, movieRoutes);
 app.use('/api/reviews', requireDatabase, reviewRoutes);
 app.use('/api/users', requireDatabase, userRoutes);
 app.use('/api/watchlist', requireDatabase, watchlistRoutes);
+app.use('/api/tmdb', requireDatabase, tmdbRoutes);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.status(200).json({
     status: 'OK',
-    message: 'Movie Review Platform API is running',
-    database: mongoConnected ? 'Connected' : 'Disconnected',
+    message: 'Movie Review Platform API is running with SQLite',
+    database: sqliteConnected ? 'Connected' : 'Disconnected',
+    databaseType: 'SQLite',
     timestamp: new Date().toISOString(),
-    ...(mongoConnected ? {} : {
+    ...(sqliteConnected ? {} : {
       note: 'Some features may be unavailable without database connection',
-      setup: 'Install MongoDB to enable full functionality'
+      setup: 'SQLite database will be created automatically'
     })
   });
 });
@@ -121,17 +108,26 @@ app.get('/api/health', (req, res) => {
 app.use((err, req, res, next) => {
   console.error(err.stack);
   
-  if (err.name === 'ValidationError') {
+  if (err.name === 'SequelizeValidationError') {
     return res.status(400).json({
       error: 'Validation Error',
-      message: err.message
+      message: err.message,
+      details: err.errors?.map(e => ({ field: e.path, message: e.message }))
     });
   }
   
-  if (err.name === 'CastError') {
-    return res.status(400).json({
-      error: 'Invalid ID',
-      message: 'The provided ID is not valid'
+  if (err.name === 'SequelizeUniqueConstraintError') {
+    return res.status(409).json({
+      error: 'Conflict',
+      message: 'Resource already exists',
+      details: err.errors?.map(e => ({ field: e.path, message: e.message }))
+    });
+  }
+  
+  if (err.name === 'SequelizeDatabaseError') {
+    return res.status(500).json({
+      error: 'Database Error',
+      message: 'A database error occurred'
     });
   }
   
@@ -154,6 +150,7 @@ const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
   console.log(`Environment: ${process.env.NODE_ENV || 'development'}`);
+  console.log(`Database: SQLite (${sqliteConnected ? 'Connected' : 'Disconnected'})`);
 });
 
 module.exports = app;

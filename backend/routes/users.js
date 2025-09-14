@@ -1,9 +1,8 @@
 const express = require('express');
 const { body, query, validationResult } = require('express-validator');
-const User = require('../models/User');
-const Review = require('../models/Review');
-const Watchlist = require('../models/Watchlist');
+const { User, Review, Watchlist } = require('../models/index');
 const { authenticate, checkResourceOwnership, requireAdmin } = require('../middleware/auth');
+const { Op } = require('sequelize');
 
 const router = express.Router();
 
@@ -12,12 +11,17 @@ router.get('/:userId', async (req, res) => {
   try {
     const userId = req.params.userId;
 
-    const user = await User.findById(userId)
-      .select('-password -__v')
-      .populate('reviews', 'rating title movie createdAt', null, {
+    const user = await User.findByPk(userId, {
+      attributes: { exclude: ['password', 'createdAt', 'updatedAt'] },
+      include: [{
+        model: Review,
+        as: 'reviews',
+        attributes: ['rating', 'title', 'movieId', 'createdAt'],
         limit: 5,
-        sort: { createdAt: -1 }
-      });
+        order: [['createdAt', 'DESC']],
+        required: false
+      }]
+    });
 
     if (!user || !user.isActive) {
       return res.status(404).json({
@@ -28,11 +32,10 @@ router.get('/:userId', async (req, res) => {
 
     res.json({
       user: {
-        id: user._id,
+        id: user.id,
         username: user.username,
         profilePicture: user.profilePicture,
         bio: user.bio,
-        favoriteGenres: user.favoriteGenres,
         reviewCount: user.reviewCount,
         watchlistCount: user.watchlistCount,
         createdAt: user.createdAt
@@ -40,12 +43,6 @@ router.get('/:userId', async (req, res) => {
     });
   } catch (error) {
     console.error('Get user profile error:', error);
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid user ID',
-        message: 'The provided user ID is not valid'
-      });
-    }
     res.status(500).json({
       error: 'Server error',
       message: 'Unable to fetch user profile'
@@ -66,10 +63,6 @@ router.put('/:userId', authenticate, checkResourceOwnership('profile'), [
     .optional()
     .isLength({ max: 500 })
     .withMessage('Bio cannot exceed 500 characters'),
-  body('favoriteGenres')
-    .optional()
-    .isArray()
-    .withMessage('Favorite genres must be an array'),
   body('profilePicture')
     .optional()
     .isURL()
@@ -86,9 +79,9 @@ router.put('/:userId', authenticate, checkResourceOwnership('profile'), [
     }
 
     const userId = req.params.userId;
-    const { username, bio, favoriteGenres, profilePicture } = req.body;
+    const { username, bio, profilePicture } = req.body;
 
-    const user = await User.findById(userId);
+    const user = await User.findByPk(userId);
     if (!user || !user.isActive) {
       return res.status(404).json({
         error: 'User not found',
@@ -98,32 +91,33 @@ router.put('/:userId', authenticate, checkResourceOwnership('profile'), [
 
     // Check if username is being changed and already exists
     if (username && username !== user.username) {
-      const existingUser = await User.findOne({ username });
+      const existingUser = await User.findOne({ 
+        where: { username } 
+      });
       if (existingUser) {
         return res.status(400).json({
           error: 'Username taken',
           message: 'This username is already taken'
         });
       }
-      user.username = username;
     }
 
-    // Update other fields
-    if (bio !== undefined) user.bio = bio;
-    if (favoriteGenres !== undefined) user.favoriteGenres = favoriteGenres;
-    if (profilePicture !== undefined) user.profilePicture = profilePicture;
+    // Update user
+    const updateData = {};
+    if (username !== undefined) updateData.username = username;
+    if (bio !== undefined) updateData.bio = bio;
+    if (profilePicture !== undefined) updateData.profilePicture = profilePicture;
 
-    await user.save();
+    await user.update(updateData);
 
     res.json({
       message: 'Profile updated successfully',
       user: {
-        id: user._id,
+        id: user.id,
         username: user.username,
         email: user.email,
         profilePicture: user.profilePicture,
         bio: user.bio,
-        favoriteGenres: user.favoriteGenres,
         reviewCount: user.reviewCount,
         watchlistCount: user.watchlistCount
       }
@@ -160,10 +154,10 @@ router.get('/:userId/reviews', [
       sortBy = 'newest'
     } = req.query;
 
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
     // Check if user exists
-    const user = await User.findById(userId);
+    const user = await User.findByPk(userId);
     if (!user || !user.isActive) {
       return res.status(404).json({
         error: 'User not found',
@@ -171,15 +165,36 @@ router.get('/:userId/reviews', [
       });
     }
 
-    const reviews = await Review.getUserReviews(userId, {
-      sortBy,
-      limit: parseInt(limit),
-      skip: parseInt(skip)
-    });
+    // Build order clause
+    let orderClause = [];
+    switch (sortBy) {
+      case 'newest':
+        orderClause = [['createdAt', 'DESC']];
+        break;
+      case 'rating_high':
+        orderClause = [['rating', 'DESC']];
+        break;
+      case 'rating_low':
+        orderClause = [['rating', 'ASC']];
+        break;
+      case 'helpful':
+        orderClause = [['helpfulVotes', 'DESC']];
+        break;
+    }
 
-    const totalReviews = await Review.countDocuments({
-      user: userId,
-      isActive: true
+    const { rows: reviews, count: totalReviews } = await Review.findAndCountAll({
+      where: {
+        userId: userId,
+        isActive: true
+      },
+      include: [{
+        model: require('../models/Movie'),
+        as: 'movie',
+        attributes: ['title', 'posterUrl', 'releaseDate']
+      }],
+      order: orderClause,
+      limit: parseInt(limit),
+      offset: parseInt(offset)
     });
 
     res.json({
@@ -188,18 +203,12 @@ router.get('/:userId/reviews', [
         currentPage: parseInt(page),
         totalPages: Math.ceil(totalReviews / limit),
         totalReviews,
-        hasNext: skip + reviews.length < totalReviews,
+        hasNext: offset + reviews.length < totalReviews,
         hasPrev: page > 1
       }
     });
   } catch (error) {
     console.error('Get user reviews error:', error);
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid user ID',
-        message: 'The provided user ID is not valid'
-      });
-    }
     res.status(500).json({
       error: 'Server error',
       message: 'Unable to fetch user reviews'
@@ -213,7 +222,7 @@ router.get('/:userId/review-stats', async (req, res) => {
     const userId = req.params.userId;
 
     // Check if user exists
-    const user = await User.findById(userId);
+    const user = await User.findByPk(userId);
     if (!user || !user.isActive) {
       return res.status(404).json({
         error: 'User not found',
@@ -221,33 +230,26 @@ router.get('/:userId/review-stats', async (req, res) => {
       });
     }
 
-    const stats = await Review.aggregate([
-      { $match: { user: userId, isActive: true } },
-      {
-        $group: {
-          _id: null,
-          totalReviews: { $sum: 1 },
-          averageRating: { $avg: '$rating' },
-          totalHelpfulVotes: { $sum: '$helpfulVotes' },
-          ratingDistribution: {
-            $push: {
-              $switch: {
-                branches: [
-                  { case: { $eq: ['$rating', 5] }, then: 'five' },
-                  { case: { $eq: ['$rating', 4] }, then: 'four' },
-                  { case: { $eq: ['$rating', 3] }, then: 'three' },
-                  { case: { $eq: ['$rating', 2] }, then: 'two' },
-                  { case: { $eq: ['$rating', 1] }, then: 'one' }
-                ],
-                default: 'unknown'
-              }
-            }
-          }
-        }
-      }
-    ]);
+    const sequelize = require('../config/database');
+    
+    const [results] = await sequelize.query(`
+      SELECT 
+        COUNT(*) as totalReviews,
+        AVG(rating) as averageRating,
+        SUM(helpfulVotes) as totalHelpfulVotes,
+        COUNT(CASE WHEN rating = 5 THEN 1 END) as fiveStars,
+        COUNT(CASE WHEN rating = 4 THEN 1 END) as fourStars,
+        COUNT(CASE WHEN rating = 3 THEN 1 END) as threeStars,
+        COUNT(CASE WHEN rating = 2 THEN 1 END) as twoStars,
+        COUNT(CASE WHEN rating = 1 THEN 1 END) as oneStar
+      FROM Reviews 
+      WHERE userId = :userId AND isActive = true
+    `, {
+      replacements: { userId },
+      type: sequelize.QueryTypes.SELECT
+    });
 
-    if (stats.length === 0) {
+    if (!results.length || results[0].totalReviews === '0') {
       return res.json({
         totalReviews: 0,
         averageRating: 0,
@@ -256,29 +258,22 @@ router.get('/:userId/review-stats', async (req, res) => {
       });
     }
 
-    const result = stats[0];
-    const distribution = { five: 0, four: 0, three: 0, two: 0, one: 0 };
-    
-    result.ratingDistribution.forEach(rating => {
-      if (distribution[rating] !== undefined) {
-        distribution[rating]++;
-      }
-    });
+    const stats = results[0];
 
     res.json({
-      totalReviews: result.totalReviews,
-      averageRating: Math.round(result.averageRating * 10) / 10,
-      totalHelpfulVotes: result.totalHelpfulVotes,
-      ratingDistribution: distribution
+      totalReviews: parseInt(stats.totalReviews),
+      averageRating: Math.round(parseFloat(stats.averageRating) * 10) / 10,
+      totalHelpfulVotes: parseInt(stats.totalHelpfulVotes),
+      ratingDistribution: {
+        five: parseInt(stats.fiveStars),
+        four: parseInt(stats.fourStars),
+        three: parseInt(stats.threeStars),
+        two: parseInt(stats.twoStars),
+        one: parseInt(stats.oneStar)
+      }
     });
   } catch (error) {
     console.error('Get user review stats error:', error);
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid user ID',
-        message: 'The provided user ID is not valid'
-      });
-    }
     res.status(500).json({
       error: 'Server error',
       message: 'Unable to fetch user review statistics'
@@ -308,36 +303,24 @@ router.get('/search', [
       limit = 10
     } = req.query;
 
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
-    const searchRegex = new RegExp(q, 'i');
-    
-    const users = await User.find({
-      $and: [
-        { isActive: true },
-        {
-          $or: [
-            { username: searchRegex },
-            { bio: searchRegex }
-          ]
-        }
-      ]
-    })
-    .select('username profilePicture bio reviewCount watchlistCount createdAt')
-    .sort({ reviewCount: -1, createdAt: -1 })
-    .skip(skip)
-    .limit(parseInt(limit));
-
-    const totalUsers = await User.countDocuments({
-      $and: [
-        { isActive: true },
-        {
-          $or: [
-            { username: searchRegex },
-            { bio: searchRegex }
-          ]
-        }
-      ]
+    const { rows: users, count: totalUsers } = await User.findAndCountAll({
+      where: {
+        [Op.and]: [
+          { isActive: true },
+          {
+            [Op.or]: [
+              { username: { [Op.iLike]: `%${q}%` } },
+              { bio: { [Op.iLike]: `%${q}%` } }
+            ]
+          }
+        ]
+      },
+      attributes: ['id', 'username', 'profilePicture', 'bio', 'reviewCount', 'watchlistCount', 'createdAt'],
+      order: [['reviewCount', 'DESC'], ['createdAt', 'DESC']],
+      limit: parseInt(limit),
+      offset: parseInt(offset)
     });
 
     res.json({
@@ -346,7 +329,7 @@ router.get('/search', [
         currentPage: parseInt(page),
         totalPages: Math.ceil(totalUsers / limit),
         totalUsers,
-        hasNext: skip + users.length < totalUsers,
+        hasNext: offset + users.length < totalUsers,
         hasPrev: page > 1
       }
     });
@@ -375,10 +358,15 @@ router.get('/top', [
 
     const { limit = 10 } = req.query;
 
-    const topUsers = await User.find({ isActive: true, reviewCount: { $gt: 0 } })
-      .select('username profilePicture bio reviewCount watchlistCount createdAt')
-      .sort({ reviewCount: -1, createdAt: 1 })
-      .limit(parseInt(limit));
+    const topUsers = await User.findAll({
+      where: { 
+        isActive: true, 
+        reviewCount: { [Op.gt]: 0 } 
+      },
+      attributes: ['id', 'username', 'profilePicture', 'bio', 'reviewCount', 'watchlistCount', 'createdAt'],
+      order: [['reviewCount', 'DESC'], ['createdAt', 'ASC']],
+      limit: parseInt(limit)
+    });
 
     res.json({ users: topUsers });
   } catch (error) {
@@ -412,19 +400,19 @@ router.get('/', authenticate, requireAdmin, [
       status = 'all'
     } = req.query;
 
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
-    let query = {};
-    if (status === 'active') query.isActive = true;
-    else if (status === 'inactive') query.isActive = false;
+    let whereClause = {};
+    if (status === 'active') whereClause.isActive = true;
+    else if (status === 'inactive') whereClause.isActive = false;
 
-    const users = await User.find(query)
-      .select('-password')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
-
-    const totalUsers = await User.countDocuments(query);
+    const { rows: users, count: totalUsers } = await User.findAndCountAll({
+      where: whereClause,
+      attributes: { exclude: ['password'] },
+      order: [['createdAt', 'DESC']],
+      limit: parseInt(limit),
+      offset: parseInt(offset)
+    });
 
     res.json({
       users,
@@ -432,7 +420,7 @@ router.get('/', authenticate, requireAdmin, [
         currentPage: parseInt(page),
         totalPages: Math.ceil(totalUsers / limit),
         totalUsers,
-        hasNext: skip + users.length < totalUsers,
+        hasNext: offset + users.length < totalUsers,
         hasPrev: page > 1
       }
     });
@@ -450,7 +438,7 @@ router.patch('/:userId/toggle-status', authenticate, requireAdmin, async (req, r
   try {
     const userId = req.params.userId;
 
-    const user = await User.findById(userId);
+    const user = await User.findByPk(userId);
     if (!user) {
       return res.status(404).json({
         error: 'User not found',
@@ -458,13 +446,12 @@ router.patch('/:userId/toggle-status', authenticate, requireAdmin, async (req, r
       });
     }
 
-    user.isActive = !user.isActive;
-    await user.save();
+    await user.update({ isActive: !user.isActive });
 
     res.json({
       message: `User ${user.isActive ? 'activated' : 'deactivated'} successfully`,
       user: {
-        id: user._id,
+        id: user.id,
         username: user.username,
         email: user.email,
         isActive: user.isActive
@@ -472,12 +459,6 @@ router.patch('/:userId/toggle-status', authenticate, requireAdmin, async (req, r
     });
   } catch (error) {
     console.error('Toggle user status error:', error);
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid user ID',
-        message: 'The provided user ID is not valid'
-      });
-    }
     res.status(500).json({
       error: 'Server error',
       message: 'Unable to toggle user status'

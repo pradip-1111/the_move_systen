@@ -8,7 +8,9 @@
     "server": "cd backend && npm run dev",
     "client": "cd frontend && npm start",
     "build": "cd frontend && npm run build",
-    "install-deps": "npm install && cd backend && npm install && cd ../frontend && npm install"
+    "start": "cd backend && npm start",
+    "install-deps": "npm install && cd backend && npm install && cd ../frontend && npm install",
+    "vercel-build": "cd frontend && npm run build"
   },
   "keywords": [
     "movie",
@@ -20,10 +22,8 @@
   ],
   "author": "Movie Review Platform Team",
   "license": "MIT",
+  "dependencies": {},
   "devDependencies": {
     "concurrently": "^7.6.0"
-  },
-  "dependencies": {
-    "react-scripts": "^0.0.0"
   }
 }

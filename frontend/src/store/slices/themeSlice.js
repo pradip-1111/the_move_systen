@@ -1,6 +1,11 @@
 import { createSlice } from '@reduxjs/toolkit';
 
 const getInitialTheme = () => {
+  // Check if we're in browser environment
+  if (typeof window === 'undefined') {
+    return 'light';
+  }
+  
   // Check localStorage first
   const savedTheme = localStorage.getItem('theme');
   if (savedTheme) {
@@ -25,11 +30,15 @@ const themeSlice = createSlice({
   reducers: {
     toggleTheme: (state) => {
       state.mode = state.mode === 'light' ? 'dark' : 'light';
-      localStorage.setItem('theme', state.mode);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('theme', state.mode);
+      }
     },
     setTheme: (state, action) => {
       state.mode = action.payload;
-      localStorage.setItem('theme', state.mode);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('theme', state.mode);
+      }
     },
   },
 });

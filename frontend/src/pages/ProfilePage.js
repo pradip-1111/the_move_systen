@@ -17,7 +17,7 @@ const ProfilePage = () => {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('reviews');
 
-  const isOwnProfile = isAuthenticated && currentUser?._id === userId;
+  const isOwnProfile = isAuthenticated && currentUser?.id === userId;
 
   useEffect(() => {
     const fetchProfileData = async () => {
@@ -193,10 +193,10 @@ const ProfilePage = () => {
             {userReviews.length > 0 ? (
               <div className="space-y-4">
                 {userReviews.map(review => (
-                  <div key={review._id} className="border-b border-gray-200 pb-4 last:border-b-0">
+                  <div key={review.id} className="border-b border-gray-200 pb-4 last:border-b-0">
                     <div className="flex justify-between items-start mb-2">
                       <h3 className="font-medium text-blue-600 hover:text-blue-700">
-                        <button onClick={() => navigate(`/movies/${review.movie._id}`)}>
+                        <button onClick={() => navigate(`/movies/${review.movie.id}`)}>
                           {review.movie.title}
                         </button>
                       </h3>

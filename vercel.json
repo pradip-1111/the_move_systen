@@ -4,15 +4,27 @@
     {
       "src": "frontend/package.json",
       "use": "@vercel/static-build",
-      "config": { "distDir": "build" }
-    },
-    {
-      "src": "backend/api/**/*.js",
-      "use": "@vercel/node"
+      "config": { 
+        "distDir": "build"
+      }
     }
   ],
   "routes": [
-    { "src": "/api/(.*)", "dest": "/backend/api/$1" },
-    { "src": "/(.*)", "dest": "/frontend/build/$1" }
-  ]
+    {
+      "src": "/api/(.*)",
+      "dest": "/api/$1"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/frontend/build/$1"
+    }
+  ],
+  "functions": {
+    "api/**/*.js": {
+      "runtime": "nodejs18.x"
+    }
+  },
+  "env": {
+    "NODE_ENV": "production"
+  }
 }

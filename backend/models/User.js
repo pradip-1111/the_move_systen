@@ -1,103 +1,91 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
 const bcrypt = require('bcryptjs');
+const { sequelize } = require('../config/database');
 
-const userSchema = new mongoose.Schema({
+const User = sequelize.define('User', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
+  },
   username: {
-    type: String,
-    required: [true, 'Username is required'],
+    type: DataTypes.STRING(20),
+    allowNull: false,
     unique: true,
-    trim: true,
-    minlength: [3, 'Username must be at least 3 characters long'],
-    maxlength: [20, 'Username cannot exceed 20 characters']
+    validate: {
+      len: [3, 20],
+      notEmpty: true
+    }
   },
   email: {
-    type: String,
-    required: [true, 'Email is required'],
+    type: DataTypes.STRING(100),
+    allowNull: false,
     unique: true,
-    lowercase: true,
-    trim: true,
-    match: [/^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/, 'Please enter a valid email']
+    validate: {
+      isEmail: true,
+      notEmpty: true
+    }
   },
   password: {
-    type: String,
-    required: [true, 'Password is required'],
-    minlength: [6, 'Password must be at least 6 characters long']
+    type: DataTypes.STRING(255),
+    allowNull: false,
+    validate: {
+      len: [6, 255],
+      notEmpty: true
+    }
   },
   profilePicture: {
-    type: String,
-    default: ''
+    type: DataTypes.TEXT,
+    defaultValue: ''
   },
   bio: {
-    type: String,
-    maxlength: [500, 'Bio cannot exceed 500 characters'],
-    default: ''
+    type: DataTypes.TEXT,
+    validate: {
+      len: [0, 500]
+    },
+    defaultValue: ''
   },
-  favoriteGenres: [{
-    type: String,
-    enum: ['Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Family', 'Fantasy', 'History', 'Horror', 'Music', 'Mystery', 'Romance', 'Science Fiction', 'TV Movie', 'Thriller', 'War', 'Western']
-  }],
   isAdmin: {
-    type: Boolean,
-    default: false
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
   },
   isActive: {
-    type: Boolean,
-    default: true
+    type: DataTypes.BOOLEAN,
+    defaultValue: true
   },
   lastLogin: {
-    type: Date,
-    default: Date.now
+    type: DataTypes.DATE,
+    defaultValue: DataTypes.NOW
   },
   reviewCount: {
-    type: Number,
-    default: 0
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    validate: {
+      min: 0
+    }
   },
   watchlistCount: {
-    type: Number,
-    default: 0
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    validate: {
+      min: 0
+    }
   }
 }, {
+  tableName: 'users',
   timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
-});
-
-// Index for faster queries
-userSchema.index({ email: 1 });
-userSchema.index({ username: 1 });
-userSchema.index({ createdAt: -1 });
-
-// Virtual for user's reviews
-userSchema.virtual('reviews', {
-  ref: 'Review',
-  localField: '_id',
-  foreignField: 'user'
-});
-
-// Virtual for user's watchlist
-userSchema.virtual('watchlist', {
-  ref: 'Watchlist',
-  localField: '_id',
-  foreignField: 'user'
-});
-
-// Hash password before saving
-userSchema.pre('save', async function(next) {
-  if (!this.isModified('password')) {
-    return next();
-  }
-  
-  try {
-    const salt = await bcrypt.genSalt(12);
-    this.password = await bcrypt.hash(this.password, salt);
-    next();
-  } catch (error) {
-    next(error);
+  hooks: {
+    beforeSave: async (user) => {
+      if (user.changed('password')) {
+        const salt = await bcrypt.genSalt(12);
+        user.password = await bcrypt.hash(user.password, salt);
+      }
+    }
   }
 });
 
-// Compare password method
-userSchema.methods.comparePassword = async function(candidatePassword) {
+// Instance methods
+User.prototype.comparePassword = async function(candidatePassword) {
   try {
     return await bcrypt.compare(candidatePassword, this.password);
   } catch (error) {
@@ -105,37 +93,35 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
   }
 };
 
-// Transform output to hide sensitive information
-userSchema.methods.toJSON = function() {
-  const userObject = this.toObject();
-  delete userObject.password;
-  delete userObject.__v;
-  return userObject;
+User.prototype.toJSON = function() {
+  const values = { ...this.get() };
+  delete values.password;
+  return values;
 };
 
-// Static method to find user by email or username
-userSchema.statics.findByCredentials = async function(emailOrUsername) {
-  const user = await this.findOne({
-    $or: [
-      { email: emailOrUsername.toLowerCase() },
-      { username: emailOrUsername }
-    ]
+User.prototype.updateReviewCount = async function() {
+  const Review = require('./Review');
+  this.reviewCount = await Review.count({ where: { userId: this.id } });
+  return await this.save();
+};
+
+User.prototype.updateWatchlistCount = async function() {
+  const Watchlist = require('./Watchlist');
+  this.watchlistCount = await Watchlist.count({ where: { userId: this.id } });
+  return await this.save();
+};
+
+// Class methods
+User.findByCredentials = async function(emailOrUsername) {
+  const { Op } = require('sequelize');
+  return await this.findOne({
+    where: {
+      [Op.or]: [
+        { email: emailOrUsername.toLowerCase() },
+        { username: emailOrUsername }
+      ]
+    }
   });
-  return user;
 };
 
-// Update review count when review is added/removed
-userSchema.methods.updateReviewCount = async function() {
-  const Review = mongoose.model('Review');
-  this.reviewCount = await Review.countDocuments({ user: this._id });
-  return this.save();
-};
-
-// Update watchlist count when movie is added/removed from watchlist
-userSchema.methods.updateWatchlistCount = async function() {
-  const Watchlist = mongoose.model('Watchlist');
-  this.watchlistCount = await Watchlist.countDocuments({ user: this._id });
-  return this.save();
-};
-
-module.exports = mongoose.model('User', userSchema);
+module.exports = User;

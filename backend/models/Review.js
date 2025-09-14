@@ -1,242 +1,176 @@
-const mongoose = require('mongoose');
+const { DataTypes } = require('sequelize');
+const { sequelize } = require('../config/database');
 
-const reviewSchema = new mongoose.Schema({
-  user: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User',
-    required: [true, 'User is required for review']
+const Review = sequelize.define('Review', {
+  id: {
+    type: DataTypes.INTEGER,
+    primaryKey: true,
+    autoIncrement: true
   },
-  movie: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Movie',
-    required: [true, 'Movie is required for review']
+  userId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'users',
+      key: 'id'
+    }
+  },
+  movieId: {
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    references: {
+      model: 'movies',
+      key: 'id'
+    }
   },
   rating: {
-    type: Number,
-    required: [true, 'Rating is required'],
-    min: [1, 'Rating must be at least 1'],
-    max: [5, 'Rating cannot exceed 5']
+    type: DataTypes.INTEGER,
+    allowNull: false,
+    validate: {
+      min: 1,
+      max: 5
+    }
   },
   title: {
-    type: String,
-    required: [true, 'Review title is required'],
-    trim: true,
-    maxlength: [100, 'Title cannot exceed 100 characters']
+    type: DataTypes.STRING(100),
+    allowNull: false,
+    validate: {
+      notEmpty: true,
+      len: [1, 100]
+    }
   },
   content: {
-    type: String,
-    required: [true, 'Review content is required'],
-    trim: true,
-    minlength: [10, 'Review must be at least 10 characters long'],
-    maxlength: [2000, 'Review cannot exceed 2000 characters']
+    type: DataTypes.TEXT,
+    allowNull: false,
+    validate: {
+      notEmpty: true,
+      len: [10, 2000]
+    }
   },
   spoilers: {
-    type: Boolean,
-    default: false
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
   },
   helpfulVotes: {
-    type: Number,
-    default: 0,
-    min: 0
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    validate: {
+      min: 0
+    }
   },
   totalVotes: {
-    type: Number,
-    default: 0,
-    min: 0
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    validate: {
+      min: 0
+    }
   },
   isEdited: {
-    type: Boolean,
-    default: false
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
   },
   editedAt: {
-    type: Date
+    type: DataTypes.DATE
   },
   isActive: {
-    type: Boolean,
-    default: true
+    type: DataTypes.BOOLEAN,
+    defaultValue: true
   },
   moderationStatus: {
-    type: String,
-    enum: ['approved', 'pending', 'rejected'],
-    default: 'approved'
+    type: DataTypes.ENUM('approved', 'pending', 'rejected'),
+    defaultValue: 'approved'
   },
   moderationReason: {
-    type: String
+    type: DataTypes.TEXT
   },
-  flags: {
-    spam: { type: Number, default: 0 },
-    inappropriate: { type: Number, default: 0 },
-    spoiler: { type: Number, default: 0 }
+  flagSpam: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  flagInappropriate: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
+  },
+  flagSpoiler: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0
   }
 }, {
+  tableName: 'reviews',
   timestamps: true,
-  toJSON: { virtuals: true },
-  toObject: { virtuals: true }
+  indexes: [
+    {
+      fields: ['movieId', 'createdAt']
+    },
+    {
+      fields: ['userId', 'createdAt']
+    },
+    {
+      unique: true,
+      fields: ['movieId', 'userId'],
+      name: 'reviews_movie_user_unique'
+    },
+    {
+      fields: ['rating']
+    },
+    {
+      fields: ['helpfulVotes']
+    },
+    {
+      fields: ['moderationStatus']
+    }
+  ],
+  hooks: {
+    beforeUpdate: (review) => {
+      if (review.changed('content') || review.changed('rating') || review.changed('title')) {
+        review.isEdited = true;
+        review.editedAt = new Date();
+      }
+    },
+    afterSave: async (review) => {
+      // Update movie rating statistics
+      const Movie = require('./Movie');
+      const movie = await Movie.findByPk(review.movieId);
+      if (movie) {
+        await movie.updateRatingStats();
+      }
+    },
+    afterDestroy: async (review) => {
+      // Update movie rating statistics
+      const Movie = require('./Movie');
+      const movie = await Movie.findByPk(review.movieId);
+      if (movie) {
+        await movie.updateRatingStats();
+      }
+    }
+  }
 });
-
-// Compound indexes for better query performance
-reviewSchema.index({ movie: 1, createdAt: -1 });
-reviewSchema.index({ user: 1, createdAt: -1 });
-reviewSchema.index({ movie: 1, user: 1 }, { unique: true }); // One review per user per movie
-reviewSchema.index({ rating: -1 });
-reviewSchema.index({ helpfulVotes: -1 });
-reviewSchema.index({ moderationStatus: 1 });
 
 // Virtual for helpful percentage
-reviewSchema.virtual('helpfulPercentage').get(function() {
+Review.prototype.getHelpfulPercentage = function() {
   if (this.totalVotes === 0) return 0;
   return Math.round((this.helpfulVotes / this.totalVotes) * 100);
-});
-
-// Virtual for populated user info (without password)
-reviewSchema.virtual('userInfo', {
-  ref: 'User',
-  localField: 'user',
-  foreignField: '_id',
-  justOne: true,
-  select: 'username profilePicture reviewCount'
-});
-
-// Virtual for populated movie info
-reviewSchema.virtual('movieInfo', {
-  ref: 'Movie',
-  localField: 'movie',
-  foreignField: '_id',
-  justOne: true,
-  select: 'title posterUrl releaseDate averageRating'
-});
-
-// Pre-save middleware to handle edit tracking
-reviewSchema.pre('save', function(next) {
-  if (this.isModified('content') || this.isModified('rating') || this.isModified('title')) {
-    if (!this.isNew) {
-      this.isEdited = true;
-      this.editedAt = new Date();
-    }
-  }
-  next();
-});
-
-// Post-save middleware to update movie rating statistics
-reviewSchema.post('save', async function() {
-  try {
-    const Movie = mongoose.model('Movie');
-    const movie = await Movie.findById(this.movie);
-    if (movie) {
-      await movie.updateRatingStats();
-    }
-  } catch (error) {
-    console.error('Error updating movie rating stats:', error);
-  }
-});
-
-// Post-remove middleware to update movie rating statistics
-reviewSchema.post('remove', async function() {
-  try {
-    const Movie = mongoose.model('Movie');
-    const movie = await Movie.findById(this.movie);
-    if (movie) {
-      await movie.updateRatingStats();
-    }
-  } catch (error) {
-    console.error('Error updating movie rating stats:', error);
-  }
-});
-
-// Static method to get reviews for a specific movie
-reviewSchema.statics.getMovieReviews = function(movieId, options = {}) {
-  const {
-    sortBy = 'helpful',
-    limit = 10,
-    skip = 0,
-    includeInactive = false
-  } = options;
-
-  let query = { movie: movieId };
-  if (!includeInactive) {
-    query.isActive = true;
-    query.moderationStatus = 'approved';
-  }
-
-  let sortOptions = {};
-  switch (sortBy) {
-    case 'newest':
-      sortOptions = { createdAt: -1 };
-      break;
-    case 'oldest':
-      sortOptions = { createdAt: 1 };
-      break;
-    case 'rating_high':
-      sortOptions = { rating: -1, createdAt: -1 };
-      break;
-    case 'rating_low':
-      sortOptions = { rating: 1, createdAt: -1 };
-      break;
-    case 'helpful':
-    default:
-      sortOptions = { helpfulVotes: -1, createdAt: -1 };
-      break;
-  }
-
-  return this.find(query)
-    .populate('user', 'username profilePicture reviewCount')
-    .sort(sortOptions)
-    .skip(skip)
-    .limit(limit);
 };
 
-// Static method to get user's reviews
-reviewSchema.statics.getUserReviews = function(userId, options = {}) {
-  const {
-    sortBy = 'newest',
-    limit = 10,
-    skip = 0
-  } = options;
-
-  let sortOptions = {};
-  switch (sortBy) {
-    case 'rating_high':
-      sortOptions = { rating: -1, createdAt: -1 };
-      break;
-    case 'rating_low':
-      sortOptions = { rating: 1, createdAt: -1 };
-      break;
-    case 'helpful':
-      sortOptions = { helpfulVotes: -1, createdAt: -1 };
-      break;
-    case 'newest':
-    default:
-      sortOptions = { createdAt: -1 };
-      break;
-  }
-
-  return this.find({ user: userId, isActive: true })
-    .populate('movie', 'title posterUrl releaseDate averageRating')
-    .sort(sortOptions)
-    .skip(skip)
-    .limit(limit);
-};
-
-// Method to mark review as helpful
-reviewSchema.methods.markHelpful = function() {
+// Instance methods
+Review.prototype.markHelpful = function() {
   this.helpfulVotes++;
   this.totalVotes++;
   return this.save();
 };
 
-// Method to mark review as not helpful
-reviewSchema.methods.markNotHelpful = function() {
+Review.prototype.markNotHelpful = function() {
   this.totalVotes++;
   return this.save();
 };
 
-// Method to flag review
-reviewSchema.methods.flag = function(reason) {
-  if (this.flags[reason] !== undefined) {
-    this.flags[reason]++;
+Review.prototype.flag = function(reason) {
+  const flagField = `flag${reason.charAt(0).toUpperCase() + reason.slice(1)}`;
+  if (this[flagField] !== undefined) {
+    this[flagField]++;
     
     // Auto-moderate if too many flags
-    const totalFlags = Object.values(this.flags).reduce((sum, count) => sum + count, 0);
+    const totalFlags = this.flagSpam + this.flagInappropriate + this.flagSpoiler;
     if (totalFlags >= 5) {
       this.moderationStatus = 'pending';
     }
@@ -246,33 +180,104 @@ reviewSchema.methods.flag = function(reason) {
   throw new Error('Invalid flag reason');
 };
 
-// Static method to get review statistics
-reviewSchema.statics.getReviewStats = async function() {
-  const stats = await this.aggregate([
-    {
-      $group: {
-        _id: null,
-        totalReviews: { $sum: 1 },
-        averageRating: { $avg: '$rating' },
-        ratingDistribution: {
-          $push: {
-            $switch: {
-              branches: [
-                { case: { $eq: ['$rating', 5] }, then: 'five' },
-                { case: { $eq: ['$rating', 4] }, then: 'four' },
-                { case: { $eq: ['$rating', 3] }, then: 'three' },
-                { case: { $eq: ['$rating', 2] }, then: 'two' },
-                { case: { $eq: ['$rating', 1] }, then: 'one' }
-              ],
-              default: 'unknown'
-            }
-          }
-        }
-      }
-    }
-  ]);
+// Static methods
+Review.getMovieReviews = function(movieId, options = {}) {
+  const {
+    sortBy = 'helpful',
+    limit = 10,
+    offset = 0,
+    includeInactive = false
+  } = options;
 
-  if (stats.length === 0) {
+  let whereClause = { movieId: movieId };
+  if (!includeInactive) {
+    whereClause.isActive = true;
+    whereClause.moderationStatus = 'approved';
+  }
+
+  let order = [];
+  switch (sortBy) {
+    case 'newest':
+      order = [['createdAt', 'DESC']];
+      break;
+    case 'oldest':
+      order = [['createdAt', 'ASC']];
+      break;
+    case 'rating_high':
+      order = [['rating', 'DESC'], ['createdAt', 'DESC']];
+      break;
+    case 'rating_low':
+      order = [['rating', 'ASC'], ['createdAt', 'DESC']];
+      break;
+    case 'helpful':
+    default:
+      order = [['helpfulVotes', 'DESC'], ['createdAt', 'DESC']];
+      break;
+  }
+
+  return this.findAll({
+    where: whereClause,
+    include: [{
+      model: require('./User'),
+      attributes: ['id', 'username', 'profilePicture', 'reviewCount']
+    }],
+    order: order,
+    offset: offset,
+    limit: limit
+  });
+};
+
+Review.getUserReviews = function(userId, options = {}) {
+  const {
+    sortBy = 'newest',
+    limit = 10,
+    offset = 0
+  } = options;
+
+  let order = [];
+  switch (sortBy) {
+    case 'rating_high':
+      order = [['rating', 'DESC'], ['createdAt', 'DESC']];
+      break;
+    case 'rating_low':
+      order = [['rating', 'ASC'], ['createdAt', 'DESC']];
+      break;
+    case 'helpful':
+      order = [['helpfulVotes', 'DESC'], ['createdAt', 'DESC']];
+      break;
+    case 'newest':
+    default:
+      order = [['createdAt', 'DESC']];
+      break;
+  }
+
+  return this.findAll({
+    where: { userId: userId, isActive: true },
+    include: [{
+      model: require('./Movie'),
+      attributes: ['id', 'title', 'posterUrl', 'releaseDate', 'averageRating']
+    }],
+    order: order,
+    offset: offset,
+    limit: limit
+  });
+};
+
+Review.getReviewStats = async function() {
+  const stats = await this.findAll({
+    attributes: [
+      [sequelize.fn('COUNT', sequelize.col('id')), 'totalReviews'],
+      [sequelize.fn('AVG', sequelize.col('rating')), 'averageRating'],
+      [sequelize.fn('SUM', sequelize.literal('CASE WHEN rating = 5 THEN 1 ELSE 0 END')), 'five'],
+      [sequelize.fn('SUM', sequelize.literal('CASE WHEN rating = 4 THEN 1 ELSE 0 END')), 'four'],
+      [sequelize.fn('SUM', sequelize.literal('CASE WHEN rating = 3 THEN 1 ELSE 0 END')), 'three'],
+      [sequelize.fn('SUM', sequelize.literal('CASE WHEN rating = 2 THEN 1 ELSE 0 END')), 'two'],
+      [sequelize.fn('SUM', sequelize.literal('CASE WHEN rating = 1 THEN 1 ELSE 0 END')), 'one']
+    ],
+    raw: true
+  });
+
+  if (stats.length === 0 || stats[0].totalReviews === 0) {
     return {
       totalReviews: 0,
       averageRating: 0,
@@ -281,19 +286,17 @@ reviewSchema.statics.getReviewStats = async function() {
   }
 
   const result = stats[0];
-  const distribution = { five: 0, four: 0, three: 0, two: 0, one: 0 };
-  
-  result.ratingDistribution.forEach(rating => {
-    if (distribution[rating] !== undefined) {
-      distribution[rating]++;
-    }
-  });
-
   return {
     totalReviews: result.totalReviews,
     averageRating: Math.round(result.averageRating * 10) / 10,
-    ratingDistribution: distribution
+    ratingDistribution: {
+      five: result.five || 0,
+      four: result.four || 0,
+      three: result.three || 0,
+      two: result.two || 0,
+      one: result.one || 0
+    }
   };
 };
 
-module.exports = mongoose.model('Review', reviewSchema);
+module.exports = Review;

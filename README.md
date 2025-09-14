@@ -1,615 +1,305 @@
-# 🎬 Movie Review Platform
+# MovieHub - Full-Stack Movie Review Platform
 
-A modern, immersive full-stack movie review platform built with React, Node.js, Express, and MongoDB. Experience cinema culture with cutting-edge UI design, 3D visual elements, and a comprehensive movie discovery and review system.
+A modern, full-stack web application for discovering, reviewing, and managing your favorite movies. Built with React, Node.js, and SQLite, featuring a sleek dark mode interface and comprehensive movie database.
 
-##  Features
+## 🎬 Features
 
-###  Visual & User Experience
-- **Modern Dark/Light Theme System**: Seamless theme switching with persistent user preferences
-- **3D Cinema Elements**: Immersive 3D movie reels, film strips, and floating cinema objects
-- **Glass Morphism Design**: Contemporary UI with translucent effects and smooth animations
-- **Responsive Design**: Optimized for desktop, tablet, and mobile devices with adaptive layouts
-- **Micro-interactions**: Smooth hover effects, transitions, and animated components
+- **Movie Discovery**: Browse a curated collection of 20+ popular movies from classics to modern hits
+- **User Authentication**: Secure registration and login system with JWT tokens
+- **Movie Reviews**: Write detailed reviews with ratings, titles, and comprehensive content
+- **Personal Watchlist**: Save movies to watch later and manage your viewing preferences
+- **Search & Filter**: Find movies by title, genre, director, or cast members
+- **Responsive Design**: Beautiful dark/light theme with mobile-first responsive layout
+- **TMDB Integration**: High-quality movie posters and metadata from The Movie Database
+- **User Profiles**: Personal dashboards with review history and statistics
 
-###  Core Features
-- **Movie Discovery**: Browse and search movies with advanced filtering and modern card layouts
-- **User Reviews**: Write, read, and rate movie reviews with enhanced UI components
-- **Personal Watchlist**: Track movies you want to watch with status management
-- **User Authentication**: Secure registration and login system with modern forms
-- **Real-time Updates**: Live synchronization of reviews, ratings, and watchlist changes
-
-###  Advanced Features
-- **Review Voting**: Mark reviews as helpful or not helpful with instant feedback
-- **Movie Ratings**: Aggregate rating system with detailed statistics and visual indicators
-- **User Profiles**: Personalized user profiles with review history and enhanced layouts
-- **Search & Filter**: Advanced search with genre, year, rating filters, and instant results
-- **Admin Panel**: Administrative controls for managing movies and users
-- **Theme Persistence**: Automatic theme detection and localStorage persistence
-- **Visual Feedback**: Toast notifications, loading states, and error handling
-
-## 🛠️ Tech Stack
+## 🏗️ Tech Stack
 
 ### Frontend
-- **React** - UI library with hooks and functional components
-- **Redux Toolkit** - State management with theme persistence and async thunks
-- **React Router** - Navigation with protected routes
-- **React Query** - Data fetching and caching with optimistic updates
-- **Tailwind CSS** - Modern styling with dark mode support and custom animations
-- **CSS3** - Advanced 3D transforms, keyframe animations, and glass morphism effects
-- **Axios** - HTTP client with interceptors and error handling
-- **React Hook Form** - Form handling with validation
-- **React Hot Toast** - Modern toast notifications with theme support
-- **React Icons** - Comprehensive icon library with Lucide React icons
+- **React 18** with modern hooks and functional components
+- **Redux Toolkit** for state management
+- **Tailwind CSS** with dark mode support
+- **React Router** for navigation
+- **Responsive Design** optimized for all screen sizes
 
-### Backend
-- **Node.js** - Runtime environment
-- **Express.js** - Web framework
-- **MongoDB** - Database
-- **Mongoose** - ODM for MongoDB
-- **JWT** - Authentication
-- **bcryptjs** - Password hashing
-- **Express Validator** - Input validation
+### Backend  
+- **Node.js** with Express.js framework
+- **SQLite** database with Sequelize ORM
+- **JWT Authentication** with bcrypt password hashing
+- **RESTful API** design patterns
+- **CORS** enabled for cross-origin requests
 
-##  Modern UI Features
+### Database
+- **Sequelize Models**: User, Movie, Review, Watchlist, Genre relationships
+- **Data Validation**: Comprehensive field validation and constraints
+- **Foreign Key Relationships**: Proper relational database design
+- **Automatic Timestamps**: Created/updated tracking for all records
 
-### Dark/Light Theme System
-- **Smart Theme Detection**: Automatically detects user's system preference on first visit
-- **Persistent Storage**: Theme choice saved in localStorage for consistent experience
-- **Smooth Transitions**: Seamless color transitions when switching themes
-- **Redux Integration**: Global theme state management with [`themeSlice.js`](frontend/src/store/slices/themeSlice.js)
-- **Component Support**: All components optimized for both light and dark modes
+## 🚀 Quick Start
 
-### 3D Cinema Elements
-- **Floating Movie Reels**: Large 3D cinema reels with realistic rotation animations
-- **Animated Film Strips**: Vertical film strips with authentic perforations and sway motion
-- **3D Icon Cubes**: Rotating cubes with play icons and gradient effects
-- **Camera Elements**: 3D tilting camera icons with perspective depth
-- **Dynamic Particles**: Floating particles that drift across the screen
-- **CSS3 Transforms**: Advanced perspective transforms and GPU-accelerated animations
+### Prerequisites
+- Node.js 16+ 
+- npm or yarn
 
-### Glass Morphism Design
-- **Translucent Cards**: Modern frosted glass effect on components
-- **Backdrop Blur**: Professional blur effects with subtle transparency
-- **Contemporary Typography**: Modern font hierarchies and spacing
-- **Micro-interactions**: Smooth hover effects and state transitions
-- **Visual Feedback**: Loading states, success indicators, and error messages
+### Installation
 
-## 📋 Prerequisites
-
-Before running this application, make sure you have the following installed:
-
-- **Node.js** (v16 or higher) - [Download here](https://nodejs.org/)
-- **npm** or **yarn** - Comes with Node.js
-- **Git** - [Download here](https://git-scm.com/)
-
-### Optional (for full functionality):
-- **MongoDB** (local installation or MongoDB Atlas) - [Download here](https://www.mongodb.com/try/download/community)
-
-> **Note**: The application can run without MongoDB, but some features (authentication, reviews, watchlists) will be unavailable until MongoDB is installed and running.
-
-## 🔧 Installation & Setup
-
-### 1. Clone the Repository
-
+1. **Clone the repository**
 ```bash
-git clone https://github.com/your-username/movie-review-platform.git
-cd movie-review-platform
+git clone <repository-url>
+cd movieHub2
 ```
 
-### 2. Install Dependencies
-
-Install dependencies for both backend and frontend:
-
+2. **Install backend dependencies**
 ```bash
-# Install root dependencies
-npm run install-deps
-```
-
-Or install manually:
-
-```bash
-# Backend dependencies
 cd backend
 npm install
+```
 
-# Frontend dependencies
+3. **Install frontend dependencies**
+```bash
 cd ../frontend
 npm install
 ```
 
-### 3. MongoDB Setup (Optional but Recommended)
+4. **Set up environment variables**
 
-#### Option A: Install MongoDB Locally
-1. Download MongoDB Community Server from: https://www.mongodb.com/try/download/community
-2. Follow the installation instructions for your operating system
-3. Start MongoDB service:
-   - **Windows**: MongoDB should start automatically, or run `net start MongoDB`
-   - **macOS**: Run `brew services start mongodb/brew/mongodb-community`
-   - **Linux**: Run `sudo systemctl start mongod`
+Backend (`.env` in `/backend/`):
+```env
+NODE_ENV=development
+JWT_SECRET=your_jwt_secret_key_here
+PORT=5000
+DATABASE_URL=./database.sqlite
+TMDB_API_KEY=your_tmdb_api_key_here
+```
 
-#### Option B: Use MongoDB Atlas (Cloud)
-1. Sign up for free at: https://www.mongodb.com/atlas
-2. Create a cluster and get your connection string
-3. Update the `MONGODB_URI` in your `.env` file
+Frontend (`.env` in `/frontend/`):
+```env
+REACT_APP_API_URL=http://localhost:5000
+REACT_APP_TMDB_BASE_URL=https://api.themoviedb.org/3
+```
 
-#### Option C: Run Without MongoDB
-The application will run without MongoDB but with limited functionality. A warning banner will inform users about unavailable features.
-
-### 4. Environment Configuration
-
-#### Backend Environment Variables
-Create a `.env` file in the `backend` directory:
-
+5. **Initialize the database**
 ```bash
 cd backend
-cp .env.example .env
+node server.js
 ```
+The database will be automatically created with sample data on first run.
 
-Update the `.env` file with your configuration:
-
-```env
-# Server Configuration
-PORT=5000
-NODE_ENV=development
-
-# Database - MongoDB Atlas (or use local: mongodb://localhost:27017/movie_review_platform)
-MONGODB_URI=mongodb+srv://sarrafpradeep857_db_user:SrGyPhrAA345D7Xt@moviesystem.b7dcqkt.mongodb.net/movie_review_platform
-
-# JWT Secret (use a strong, random string)
-JWT_SECRET=your_super_secret_jwt_key_here
-JWT_EXPIRES_IN=7d
-
-# CORS
-CLIENT_URL=http://localhost:3000
-
-# Optional: TMDB API for movie data
-TMDB_API_KEY=your_tmdb_api_key_here
-TMDB_BASE_URL=https://api.themoviedb.org/3
-```
-
-#### Frontend Environment Variables (Optional)
-Create a `.env` file in the `frontend` directory if needed:
-
-```env
-REACT_APP_API_URL=http://localhost:5000/api
-```
-
-### 4. Database Setup
-
-Make sure MongoDB is running on your system:
-
-- **Local MongoDB**: Start your local MongoDB service
-- **MongoDB Atlas**: Use the connection string in your `.env` file
-
-The application will automatically create the necessary collections on first run.
-
-## 🔧 Troubleshooting
-
-### Common Issues and Solutions
-
-#### Issue: "Could not find a required file. Name: index.html"
-**Solution**: The React app needs an `index.html` file in the `frontend/public` directory. This has been created automatically, but if missing, create it with basic HTML structure.
-
-#### Issue: MongoDB Connection Error
-**Error**: `MongooseServerSelectionError: connect ECONNREFUSED`
-
-**Solutions**:
-1. **Install MongoDB** (Recommended):
-   - Download from: https://www.mongodb.com/try/download/community
-   - Follow installation instructions for your OS
-   - Start the MongoDB service
-
-2. **Use the app without MongoDB**:
-   - The application will continue running with limited functionality
-   - A warning banner will appear showing which features are unavailable
-   - API endpoints requiring database will return helpful error messages
-
-#### Issue: npm run dev fails
-**Solutions**:
-1. Make sure all dependencies are installed: `npm run install-deps`
-2. Check that both `frontend/package.json` and `backend/package.json` exist
-3. Verify Node.js version (v16 or higher required)
-
-#### Issue: Port Already in Use
-**Error**: `EADDRINUSE: address already in use :::5000` or `:::3000`
-
-**Solution**: 
-- Change ports in your `.env` file, or
-- Kill existing processes: `npx kill-port 3000 5000`
-
-### MongoDB Quick Setup
-
-#### Windows
-1. Download MongoDB Community Server
-2. Run installer with default settings
-3. MongoDB should start automatically
-
-#### macOS (with Homebrew)
+6. **Seed the database with movies**
 ```bash
-brew tap mongodb/brew
-brew install mongodb-community
-brew services start mongodb/brew/mongodb-community
+# Load 20 popular movies with sample reviews
+node scripts/reseed-movies.js
 ```
 
-#### Linux (Ubuntu/Debian)
+7. **Start the development servers**
 ```bash
-sudo apt-get install mongodb
-sudo systemctl start mongod
-sudo systemctl enable mongod
-```
-### 5. Start the Application
+# Terminal 1: Start backend server (from /backend)
+npm start
 
-#### Development Mode
-Run both frontend and backend simultaneously:
-
-```bash
-npm run dev
+# Terminal 2: Start frontend (from /frontend) 
+npm start
 ```
 
-#### Run Separately
-```bash
-# Backend (from root directory)
-npm run server
+8. **Access the application**
+- Frontend: http://localhost:3000
+- Backend API: http://localhost:5000
+- API Health Check: http://localhost:5000/api/health
 
-# Frontend (from root directory)  
-npm run client
+## 📱 Usage Guide
+
+### Getting Started
+1. **Register an Account**: Create your profile with username, email, and password
+2. **Browse Movies**: Explore the movie catalog with posters and ratings
+3. **View Details**: Click any movie for cast, plot, ratings, and reviews
+4. **Write Reviews**: Share your thoughts with title, content, and star ratings
+5. **Build Watchlist**: Save movies to watch later
+
+### Movie Reviews
+- **Star Ratings**: Rate movies from 1-5 stars
+- **Review Titles**: Write compelling headlines for your reviews
+- **Detailed Content**: Share comprehensive thoughts (minimum 10 characters)
+- **Review Management**: Edit your reviews and track helpful votes
+
+### Watchlist Features
+- **Add to Watchlist**: Save movies for later viewing
+- **Remove Items**: Clean up your list as you watch movies
+- **Personal Dashboard**: View your saved movies at a glance
+
+## 🗄️ Database Schema
+
+### Core Models
+
+**Movies**
+- id, title, overview, releaseDate, genres
+- director, cast, runtime, posterUrl, backdropUrl
+- tmdbId, averageRating, totalRatings
+- Validation: Required title/overview, rating constraints
+
+**Users** 
+- id, username, email, passwordHash
+- profilePicture, reviewCount, watchlistCount
+- JWT token authentication
+
+**Reviews**
+- id, userId, movieId, rating (1-5)
+- title, content, spoilers flag
+- helpfulVotes, moderationStatus
+- Validation: Required title/content, rating constraints
+
+**Watchlist**
+- id, userId, movieId, dateAdded
+- Unique constraint: One entry per user-movie pair
+
+### Database Seeding
+The application includes a comprehensive movie seeding script with:
+- 20 popular movies from various genres and decades
+- Proper TMDB poster URLs and metadata  
+- Sample reviews with realistic titles and content
+- All data validated against schema constraints
+
+## 🛠️ Development
+
+### Project Structure
 ```
-
-The application will be available at:
-- **Frontend**: http://localhost:3000
-- **Backend API**: http://localhost:5000
-
-## 📚 API Documentation
-
-### Authentication Endpoints
-
-#### Register User
-```http
-POST /api/auth/register
-Content-Type: application/json
-
-{
-  "username": "johndoe",
-  "email": "john@example.com",
-  "password": "Password123",
-  "confirmPassword": "Password123"
-}
-```
-
-#### Login User
-```http
-POST /api/auth/login
-Content-Type: application/json
-
-{
-  "emailOrUsername": "john@example.com",
-  "password": "Password123"
-}
-```
-
-### Movie Endpoints
-
-#### Get Movies
-```http
-GET /api/movies?page=1&limit=20&genre=Action&sortBy=popularity
-```
-
-#### Get Single Movie
-```http
-GET /api/movies/:id
-```
-
-#### Add Movie (Admin Only)
-```http
-POST /api/movies
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "title": "Movie Title",
-  "overview": "Movie description",
-  "releaseDate": "2024-01-01",
-  "director": "Director Name",
-  "genres": ["Action", "Drama"]
-}
-```
-
-### Review Endpoints
-
-#### Get Movie Reviews
-```http
-GET /api/reviews/movie/:movieId?page=1&limit=10&sortBy=helpful
-```
-
-#### Submit Review
-```http
-POST /api/reviews/movie/:movieId
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "rating": 4,
-  "title": "Great movie!",
-  "content": "This movie was fantastic...",
-  "spoilers": false
-}
-```
-
-### Watchlist Endpoints
-
-#### Get User Watchlist
-```http
-GET /api/watchlist/:userId?status=want_to_watch
-Authorization: Bearer <token>
-```
-
-#### Add to Watchlist
-```http
-POST /api/watchlist/:userId
-Authorization: Bearer <token>
-Content-Type: application/json
-
-{
-  "movieId": "movie_id_here",
-  "status": "want_to_watch",
-  "priority": "high"
-}
-```
-
-## 🗂️ Project Structure
-
-```
-movie-review-platform/
+movieHub2/
 ├── backend/
-│   ├── middleware/
-│   │   └── auth.js
-│   ├── models/
-│   │   ├── User.js
-│   │   ├── Movie.js
-│   │   ├── Review.js
-│   │   └── Watchlist.js
-│   ├── routes/
-│   │   ├── auth.js
-│   │   ├── movies.js
-│   │   ├── reviews.js
-│   │   ├── users.js
-│   │   └── watchlist.js
-│   ├── .env.example
-│   ├── package.json
-│   └── server.js
+│   ├── config/database.js      # Sequelize configuration
+│   ├── models/                 # Database models
+│   ├── routes/                 # API endpoints
+│   ├── middleware/auth.js      # JWT authentication
+│   ├── scripts/                # Database utilities
+│   └── server.js               # Express server setup
 ├── frontend/
-│   ├── public/
-│   │   ├── index.html
-│   │   └── manifest.json
 │   ├── src/
-│   │   ├── components/
-│   │   │   ├── layout/
-│   │   │   │   ├── Header.js
-│   │   │   │   └── Footer.js
-│   │   │   ├── movies/
-│   │   │   │   ├── MovieCard.js
-│   │   │   │   ├── MovieDetail.js
-│   │   │   │   └── MovieList.js
-│   │   │   ├── ui/
-│   │   │   │   ├── ThemeToggle.js         # 🌙 Dark/Light theme switcher
-│   │   │   │   ├── CSS3DElements.js       # 🎬 3D cinema objects
-│   │   │   │   ├── LoadingSpinner.js
-│   │   │   │   └── Button.js
-│   │   │   ├── auth/
-│   │   │   │   ├── LoginForm.js
-│   │   │   │   └── RegisterForm.js
-│   │   │   └── common/
-│   │   │       └── DatabaseStatus.js
-│   │   ├── pages/
-│   │   │   ├── HomePage.js               # 🎨 Enhanced with 3D elements
-│   │   │   ├── MovieDetailPage.js
-│   │   │   ├── ProfilePage.js
-│   │   │   └── WatchlistPage.js
-│   │   ├── services/
-│   │   │   └── api.js
-│   │   ├── store/
-│   │   │   ├── index.js
-│   │   │   └── slices/
-│   │   │       ├── themeSlice.js         # 🎨 Theme state management
-│   │   │       ├── authSlice.js
-│   │   │       ├── movieSlice.js
-│   │   │       └── watchlistSlice.js
-│   │   ├── App.js
-│   │   ├── index.js
-│   │   └── index.css                     # 🌈 Enhanced with 3D animations
-│   ├── package.json
-│   └── tailwind.config.js                # 🌙 Dark mode configuration
-├── package.json
+│   │   ├── components/         # React components
+│   │   ├── pages/              # Route components
+│   │   ├── store/              # Redux store & slices
+│   │   └── services/api.js     # API client
+│   └── public/                 # Static assets
 └── README.md
 ```
 
-## 🎨 Database Schema
+### Key API Endpoints
+```
+Authentication:
+POST /api/auth/register    # User registration
+POST /api/auth/login       # User login
+GET  /api/auth/profile     # Get user profile
 
-### User Collection
-```javascript
-{
-  username: String, // unique
-  email: String, // unique
-  password: String, // hashed
-  profilePicture: String,
-  bio: String,
-  favoriteGenres: [String],
-  isAdmin: Boolean,
-  reviewCount: Number,
-  watchlistCount: Number,
-  createdAt: Date,
-  updatedAt: Date
-}
+Movies:
+GET  /api/movies           # List all movies
+GET  /api/movies/:id       # Get movie details
+GET  /api/movies/search    # Search movies
+
+Reviews:
+GET  /api/reviews/movie/:id  # Get movie reviews
+POST /api/reviews            # Create review
+PUT  /api/reviews/:id        # Update review
+DELETE /api/reviews/:id      # Delete review
+
+Watchlist:
+GET  /api/watchlist          # Get user watchlist
+POST /api/watchlist          # Add to watchlist
+DELETE /api/watchlist/:id    # Remove from watchlist
 ```
 
-### Movie Collection
-```javascript
-{
-  title: String,
-  overview: String,
-  genres: [String],
-  releaseDate: Date,
-  director: String,
-  cast: [{ name: String, character: String }],
-  posterUrl: String,
-  averageRating: Number,
-  totalRatings: Number,
-  runtime: Number,
-  createdAt: Date,
-  updatedAt: Date
-}
+### Database Management
+
+**Reseeding Database**
+```bash
+cd backend
+node scripts/reseed-movies.js
 ```
+This script:
+- Clears existing movies and reviews
+- Loads 20 curated movies with TMDB data
+- Creates sample reviews with proper validation
+- Maintains referential integrity
 
-### Review Collection
-```javascript
-{
-  user: ObjectId, // ref: User
-  movie: ObjectId, // ref: Movie
-  rating: Number, // 1-5
-  title: String,
-  content: String,
-  spoilers: Boolean,
-  helpfulVotes: Number,
-  totalVotes: Number,
-  createdAt: Date,
-  updatedAt: Date
-}
-```
+**Schema Updates**
+- Models auto-sync on server start in development
+- Use Sequelize migrations for production changes
+- Backup database before major updates
 
-## 🔒 Security Features
+## 🎨 Customization
 
-- **JWT Authentication** - Secure token-based authentication
-- **Password Hashing** - bcrypt for password security
-- **Input Validation** - Express-validator for data validation
-- **Rate Limiting** - API rate limiting to prevent abuse
-- **CORS Protection** - Cross-origin resource sharing configuration
-- **Helmet.js** - Security headers
+### Styling
+- **Tailwind CSS**: Modify `tailwind.config.js` for theme changes
+- **Dark Mode**: Toggle implemented with system preference detection
+- **Components**: Styled with consistent design system
+
+### Movie Data
+- **Add Movies**: Update seeding script with new entries
+- **TMDB Integration**: Fetch latest posters and metadata
+- **Custom Fields**: Extend movie model as needed
+
+### Features
+- **Review System**: Customize rating scales and validation
+- **User Profiles**: Add avatars, bio, preferences
+- **Social Features**: Implement following, comments, sharing
 
 ## 🚀 Deployment
 
-### Backend Deployment (Heroku/Railway/Render)
+### Frontend (Vercel/Netlify)
+1. Build production bundle: `npm run build`
+2. Deploy `build/` directory to hosting platform
+3. Set environment variables in platform dashboard
 
-1. Create a new application on your platform
-2. Set environment variables in the dashboard
-3. Connect your GitHub repository
-4. Deploy the backend folder
+### Backend (Railway/Heroku)
+1. Configure production environment variables
+2. Update database connection for production
+3. Deploy with automatic builds from repository
 
-### Frontend Deployment (Netlify/Vercel)
+### Database (Production)
+- Consider PostgreSQL for production instead of SQLite
+- Set up database backups and monitoring
+- Configure connection pooling for scale
 
-1. Build the frontend:
-```bash
-cd frontend
-npm run build
-```
+## 📊 Features Implemented
 
-2. Deploy the `build` folder to your hosting platform
-
-### Environment Variables for Production
-
-Make sure to set these environment variables in production:
-
-```env
-NODE_ENV=production
-MONGODB_URI=your_production_mongodb_uri
-JWT_SECRET=your_production_jwt_secret
-CLIENT_URL=your_frontend_domain
-```
-
-## 🧪 Testing
-
-### Backend Tests
-```bash
-cd backend
-npm test
-```
-
-### Frontend Tests
-```bash
-cd frontend
-npm test
-```
+- ✅ User authentication with JWT tokens
+- ✅ Movie catalog with 20+ seeded movies
+- ✅ Comprehensive review system with validation
+- ✅ Personal watchlist functionality
+- ✅ Dark/light theme toggle
+- ✅ Responsive mobile-first design
+- ✅ Search and filtering capabilities
+- ✅ TMDB integration for movie data
+- ✅ Database reseeding scripts
+- ✅ Error handling and validation
 
 ## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push to branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
 
-## 📝 API Rate Limits
+### Development Guidelines
+- Follow React best practices and hooks patterns
+- Use TypeScript for type safety (if migrating)
+- Write descriptive commit messages
+- Test API endpoints with proper error handling
+- Ensure mobile responsiveness
 
-- **General API**: 100 requests per 15 minutes per IP
-- **Auth endpoints**: Additional rate limiting for security
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-1. **MongoDB Connection Error**
-   - Ensure MongoDB is running
-   - Check connection string in `.env`
-
-2. **CORS Issues**
-   - Verify `CLIENT_URL` in backend `.env`
-   - Check if frontend is running on the correct port
-
-3. **JWT Token Issues**
-   - Ensure `JWT_SECRET` is set in `.env`
-   - Check token expiration settings
-
-4. **Build Errors**
-   - Clear node_modules and reinstall dependencies
-   - Check Node.js version compatibility
-
-## 📄 License
+## 📝 License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
-## 👥 Authors
-
-- **Movie Review Platform Team** - [GitHub Profile](https://github.com/pradip-1111)
-
 ## 🙏 Acknowledgments
 
-- TMDB API for movie data
-- React community for excellent documentation
-- MongoDB team for the database
-- All contributors and beta testers
+- **The Movie Database (TMDB)** for movie data and poster images
+- **React & Redux** communities for excellent documentation
+- **Tailwind CSS** for the utility-first CSS framework
+- **Sequelize** for the robust ORM functionality
 
 ## 📞 Support
 
-For support and questions:
-- Create an issue on GitHub
-- Documentation: [Wiki](https://github.com/pradip-1111/movie-review-platform/wiki)
-
-## 🎯 Recent Accomplishments
-
-This movie review platform has been enhanced with cutting-edge features and modern design patterns:
-
-### ✅ Completed Features
-- **Complete Theme System**: Full dark/light mode implementation with Redux state management
-- **3D Visual Elements**: Immersive cinema-themed 3D objects and animations
-- **Modern UI Redesign**: Contemporary glass morphism design with smooth transitions
-- **Performance Optimizations**: Fixed all major bugs and runtime errors
-- **Enhanced User Experience**: Improved watchlist functionality and review system
-- **Responsive Design**: Optimized layouts for all device sizes
-
-### 🚀 Technical Achievements
-- **Zero Critical Bugs**: All reported issues resolved and tested
-- **Modern Architecture**: Redux Toolkit with async thunks and persistence
-- **Advanced CSS**: 3D transforms, keyframe animations, and GPU optimization
-- **Theme Persistence**: Smart localStorage integration with system preference detection
-- **Code Quality**: ESLint compliance and clean component architecture
-
-### 🎨 Visual Highlights
-- **Cinema Atmosphere**: Floating movie reels, film strips, and 3D camera elements
-- **Smooth Animations**: Multiple animation layers with organic movement patterns
-- **Professional Design**: Contemporary typography, spacing, and visual hierarchy
-- **Accessibility**: Proper contrast ratios and semantic markup in both themes
-
-The platform now rivals modern streaming services in both functionality and visual appeal, providing users with an immersive, professional movie review experience.
+- 📧 Email: sarrafpradeep857@gmail.com
+- 📍 Location: Tamil Nadu, India, Thiruvallur 601103
+- 🐛 Issues: Create GitHub issues for bugs or feature requests
 
 ---
 
-**Happy Movie Reviewing! 🎬**
+**Ready to discover your next favorite movie? Register an account and start exploring!** 🎬✨

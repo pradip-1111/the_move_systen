@@ -1,281 +1,222 @@
 const axios = require('axios');
-const Movie = require('../models/Movie');
+const { Movie, Genre } = require('../models');
 
 class TMDBService {
   constructor() {
-    this.baseURL = process.env.TMDB_BASE_URL || 'https://api.themoviedb.org/3';
+    this.baseURL = 'https://api.themoviedb.org/3';
     this.apiKey = process.env.TMDB_API_KEY;
-    this.accessToken = process.env.TMDB_ACCESS_TOKEN;
     this.imageBaseURL = 'https://image.tmdb.org/t/p/w500';
-  }
-
-  getHeaders() {
-    if (this.accessToken) {
-      return {
-        'Authorization': `Bearer ${this.accessToken}`,
-        'Content-Type': 'application/json'
-      };
-    }
-    return {};
-  }
-
-  getParams(additionalParams = {}) {
-    const params = { language: 'en-US', ...additionalParams };
     
-    // Use API key if no access token available
-    if (!this.accessToken && this.apiKey) {
-      params.api_key = this.apiKey;
+    if (!this.apiKey) {
+      console.warn('⚠️  TMDB_API_KEY not found in environment variables');
     }
-    
-    return params;
   }
 
   async fetchPopularMovies(page = 1) {
     try {
-      if (!this.accessToken && (!this.apiKey || this.apiKey === 'your_tmdb_api_key_here')) {
-        console.log('TMDB API authentication not configured, using mock data');
-        return this.getMockMovies();
-      }
-
       const response = await axios.get(`${this.baseURL}/movie/popular`, {
-        headers: this.getHeaders(),
-        params: this.getParams({ page })
+        params: {
+          api_key: this.apiKey,
+          page,
+          language: 'en-US'
+        }
       });
-
-      return response.data.results.map(movie => this.transformTMDBMovie(movie));
+      return response.data;
     } catch (error) {
-      console.error('Error fetching from TMDB:', error.message);
-      return this.getMockMovies();
+      console.error('Error fetching popular movies:', error.message);
+      throw error;
     }
   }
 
   async fetchTopRatedMovies(page = 1) {
     try {
-      if (!this.accessToken && (!this.apiKey || this.apiKey === 'your_tmdb_api_key_here')) {
-        return this.getMockMovies();
-      }
-
       const response = await axios.get(`${this.baseURL}/movie/top_rated`, {
-        headers: this.getHeaders(),
-        params: this.getParams({ page })
+        params: {
+          api_key: this.apiKey,
+          page,
+          language: 'en-US'
+        }
       });
-
-      return response.data.results.map(movie => this.transformTMDBMovie(movie));
+      return response.data;
     } catch (error) {
-      console.error('Error fetching top rated from TMDB:', error.message);
-      return this.getMockMovies();
+      console.error('Error fetching top rated movies:', error.message);
+      throw error;
     }
   }
 
-  async searchMovies(query, page = 1) {
+  async fetchGenres() {
     try {
-      if (!this.accessToken && (!this.apiKey || this.apiKey === 'your_tmdb_api_key_here')) {
-        return this.getMockMovies().filter(movie => 
-          movie.title.toLowerCase().includes(query.toLowerCase())
-        );
-      }
-
-      const response = await axios.get(`${this.baseURL}/search/movie`, {
-        headers: this.getHeaders(),
-        params: this.getParams({ query, page })
+      const response = await axios.get(`${this.baseURL}/genre/movie/list`, {
+        params: {
+          api_key: this.apiKey,
+          language: 'en-US'
+        }
       });
-
-      return response.data.results.map(movie => this.transformTMDBMovie(movie));
+      return response.data.genres;
     } catch (error) {
-      console.error('Error searching TMDB:', error.message);
-      return [];
+      console.error('Error fetching genres:', error.message);
+      throw error;
     }
   }
 
-  transformTMDBMovie(tmdbMovie) {
+  async fetchMovieDetails(tmdbId) {
+    try {
+      const response = await axios.get(`${this.baseURL}/movie/${tmdbId}`, {
+        params: {
+          api_key: this.apiKey,
+          language: 'en-US'
+        }
+      });
+      return response.data;
+    } catch (error) {
+      console.error(`Error fetching movie details for ID ${tmdbId}:`, error.message);
+      throw error;
+    }
+  }
+
+  transformMovieData(tmdbMovie) {
     return {
+      tmdbId: tmdbMovie.id,
       title: tmdbMovie.title,
       overview: tmdbMovie.overview,
-      releaseDate: new Date(tmdbMovie.release_date),
-      posterUrl: tmdbMovie.poster_path ? `${this.imageBaseURL}${tmdbMovie.poster_path}` : null,
-      backdropUrl: tmdbMovie.backdrop_path ? `${this.imageBaseURL}${tmdbMovie.backdrop_path}` : null,
-      tmdbId: tmdbMovie.id,
-      genres: this.mapTMDBGenres(tmdbMovie.genre_ids || []),
-      popularity: tmdbMovie.popularity,
-      voteAverage: tmdbMovie.vote_average,
-      voteCount: tmdbMovie.vote_count,
-      adult: tmdbMovie.adult,
-      originalTitle: tmdbMovie.original_title,
-      originalLanguage: tmdbMovie.original_language,
-      isActive: true
+      releaseDate: tmdbMovie.release_date || null,
+      runtime: tmdbMovie.runtime || null,
+      voteAverage: tmdbMovie.vote_average || 0,
+      voteCount: tmdbMovie.vote_count || 0,
+      popularity: tmdbMovie.popularity || 0,
+      posterPath: tmdbMovie.poster_path ? `${this.imageBaseURL}${tmdbMovie.poster_path}` : null,
+      backdropPath: tmdbMovie.backdrop_path ? `${this.imageBaseURL}${tmdbMovie.backdrop_path}` : null,
+      originalLanguage: tmdbMovie.original_language || 'en',
+      adult: tmdbMovie.adult || false
     };
   }
 
-  mapTMDBGenres(genreIds) {
-    const genreMap = {
-      28: 'Action',
-      12: 'Adventure', 
-      16: 'Animation',
-      35: 'Comedy',
-      80: 'Crime',
-      99: 'Documentary',
-      18: 'Drama',
-      10751: 'Family',
-      14: 'Fantasy',
-      36: 'History',
-      27: 'Horror',
-      10402: 'Music',
-      9648: 'Mystery',
-      10749: 'Romance',
-      878: 'Science Fiction',
-      10770: 'TV Movie',
-      53: 'Thriller',
-      10752: 'War',
-      37: 'Western'
-    };
-
-    return genreIds.map(id => genreMap[id]).filter(Boolean);
-  }
-
-  getMockMovies() {
-    return [
-      {
-        title: 'The Shawshank Redemption',
-        overview: 'Two imprisoned men bond over a number of years, finding solace and eventual redemption through acts of common decency.',
-        releaseDate: new Date('1994-09-23'),
-        director: 'Frank Darabont',
-        genres: ['Drama'],
-        runtime: 142,
-        cast: ['Tim Robbins', 'Morgan Freeman', 'Bob Gunton'],
-        posterUrl: 'https://image.tmdb.org/t/p/w500/q6y0Go1tsGEsmtFryDOJo3dEmqu.jpg',
-        backdropUrl: 'https://image.tmdb.org/t/p/w500/iNh3BivHyg5sQRPP1KOkzguEX0H.jpg',
-        popularity: 95.5,
-        voteAverage: 9.3,
-        voteCount: 2000,
-        tmdbId: 278,
-        isActive: true
-      },
-      {
-        title: 'The Godfather',
-        overview: 'The aging patriarch of an organized crime dynasty transfers control of his clandestine empire to his reluctant son.',
-        releaseDate: new Date('1972-03-24'),
-        director: 'Francis Ford Coppola',
-        genres: ['Drama', 'Crime'],
-        runtime: 175,
-        cast: ['Marlon Brando', 'Al Pacino', 'James Caan'],
-        posterUrl: 'https://image.tmdb.org/t/p/w500/3bhkrj58Vtu7enYsRolD1fZdja1.jpg',
-        backdropUrl: 'https://image.tmdb.org/t/p/w500/rSPw7tgCH9c6NqICZef4kZjFOQ5.jpg',
-        popularity: 98.2,
-        voteAverage: 9.2,
-        voteCount: 1800,
-        tmdbId: 238,
-        isActive: true
-      },
-      {
-        title: 'The Dark Knight',
-        overview: 'Batman must accept one of the greatest psychological and physical tests of his ability to fight injustice.',
-        releaseDate: new Date('2008-07-18'),
-        director: 'Christopher Nolan',
-        genres: ['Action', 'Crime', 'Drama'],
-        runtime: 152,
-        cast: ['Christian Bale', 'Heath Ledger', 'Aaron Eckhart'],
-        posterUrl: 'https://image.tmdb.org/t/p/w500/qJ2tW6WMUDux911r6m7haRef0WH.jpg',
-        backdropUrl: 'https://image.tmdb.org/t/p/w500/hqkIcbrOHL86UncnHIsHVcVmzue.jpg',
-        popularity: 89.7,
-        voteAverage: 9.0,
-        voteCount: 2200,
-        tmdbId: 155,
-        isActive: true
-      },
-      {
-        title: 'Pulp Fiction',
-        overview: 'The lives of two mob hitmen, a boxer, a gangster and his wife intertwine in four tales of violence and redemption.',
-        releaseDate: new Date('1994-10-14'),
-        director: 'Quentin Tarantino',
-        genres: ['Crime', 'Drama'],
-        runtime: 154,
-        cast: ['John Travolta', 'Uma Thurman', 'Samuel L. Jackson'],
-        posterUrl: 'https://image.tmdb.org/t/p/w500/d5iIlFn5s0ImszYzBPb8JPIfbXD.jpg',
-        backdropUrl: 'https://image.tmdb.org/t/p/w500/4cDFJr4HnXN5AdPw4AKrmLlMWdO.jpg',
-        popularity: 87.3,
-        voteAverage: 8.9,
-        voteCount: 1900,
-        tmdbId: 680,
-        isActive: true
-      },
-      {
-        title: 'Forrest Gump',
-        overview: 'The presidencies of Kennedy and Johnson through the eyes of an Alabama man with an IQ of 75.',
-        releaseDate: new Date('1994-07-06'),
-        director: 'Robert Zemeckis',
-        genres: ['Drama', 'Romance'],
-        runtime: 142,
-        cast: ['Tom Hanks', 'Robin Wright', 'Gary Sinise'],
-        posterUrl: 'https://image.tmdb.org/t/p/w500/saHP97rTPS5eLmrLQEcANmKrsFl.jpg',
-        backdropUrl: 'https://image.tmdb.org/t/p/w500/3h1JZGDhZ8nzxdgvkxha0qBqi05.jpg',
-        popularity: 85.1,
-        voteAverage: 8.8,
-        voteCount: 2100,
-        tmdbId: 13,
-        isActive: true
-      },
-      {
-        title: 'Inception',
-        overview: 'A thief who steals corporate secrets through dream-sharing technology is given the task of planting an idea.',
-        releaseDate: new Date('2010-07-16'),
-        director: 'Christopher Nolan',
-        genres: ['Action', 'Science Fiction', 'Thriller'],
-        runtime: 148,
-        cast: ['Leonardo DiCaprio', 'Marion Cotillard', 'Tom Hardy'],
-        posterUrl: 'https://image.tmdb.org/t/p/w500/9gk7adHYeDvHkCSEqAvQNLV5Uge.jpg',
-        backdropUrl: 'https://image.tmdb.org/t/p/w500/8IB2e4r4oVhHnANbnm7O3Tj6tF8.jpg',
-        popularity: 92.4,
-        voteAverage: 8.7,
-        voteCount: 2300,
-        tmdbId: 27205,
-        isActive: true
-      }
-    ];
-  }
-
-  async populateDatabase() {
+  async saveMovieToDatabase(movieData, genreIds = []) {
     try {
-      const existingCount = await Movie.countDocuments();
-      if (existingCount > 0) {
-        console.log(`Database already has ${existingCount} movies, skipping population`);
-        return;
+      // Check if movie already exists by TMDB ID
+      const existingMovie = await Movie.findOne({ where: { tmdbId: movieData.tmdbId } });
+      if (existingMovie) {
+        console.log(`Movie "${movieData.title}" already exists in database`);
+        return existingMovie;
       }
 
-      console.log('Populating database with movie data...');
+      // Create new movie
+      const movie = await Movie.create(movieData);
       
-      // First try to get real data from TMDB
-      let movies = await this.fetchPopularMovies(1);
-      
-      // If TMDB fails, use mock data
-      if (!movies || movies.length === 0) {
-        movies = this.getMockMovies();
-      }
-
-      // Insert movies into database
-      for (const movieData of movies) {
-        try {
-          const existingMovie = await Movie.findOne({ 
-            $or: [
-              { tmdbId: movieData.tmdbId },
-              { title: movieData.title }
-            ]
-          });
-
-          if (!existingMovie) {
-            const movie = new Movie(movieData);
-            await movie.save();
-            console.log(`Added movie: ${movieData.title}`);
-          }
-        } catch (error) {
-          console.error(`Error adding movie ${movieData.title}:`, error.message);
+      // Associate with genres if provided
+      if (genreIds && genreIds.length > 0) {
+        const genres = await Genre.findAll({
+          where: { tmdbId: genreIds }
+        });
+        if (genres.length > 0) {
+          await movie.setGenreList(genres);
         }
       }
 
-      const finalCount = await Movie.countDocuments();
-      console.log(`Database population complete. Total movies: ${finalCount}`);
+      console.log(`✅ Saved movie: ${movieData.title}`);
+      return movie;
+    } catch (error) {
+      console.error(`Error saving movie "${movieData.title}":`, error.message);
+      throw error;
+    }
+  }
+
+  async saveGenresToDatabase(genres) {
+    try {
+      const savedGenres = [];
+      for (const genre of genres) {
+        const [genreRecord, created] = await Genre.findOrCreate({
+          where: { tmdbId: genre.id },
+          defaults: {
+            tmdbId: genre.id,
+            name: genre.name
+          }
+        });
+        savedGenres.push(genreRecord);
+        if (created) {
+          console.log(`✅ Created genre: ${genre.name}`);
+        }
+      }
+      return savedGenres;
+    } catch (error) {
+      console.error('Error saving genres:', error.message);
+      throw error;
+    }
+  }
+
+  async populateDatabase(options = {}) {
+    const {
+      popularPages = 3,
+      topRatedPages = 2,
+      includeDetails = true
+    } = options;
+
+    console.log('🎬 Starting TMDB database population...');
+
+    try {
+      // First, fetch and save genres
+      console.log('📂 Fetching genres...');
+      const genres = await this.fetchGenres();
+      await this.saveGenresToDatabase(genres);
+
+      const allMovies = new Set(); // Use Set to avoid duplicates
+      
+      // Fetch popular movies
+      console.log(`📈 Fetching popular movies (${popularPages} pages)...`);
+      for (let page = 1; page <= popularPages; page++) {
+        const popularData = await this.fetchPopularMovies(page);
+        popularData.results.forEach(movie => allMovies.add(JSON.stringify(movie)));
+        console.log(`Fetched page ${page} of popular movies`);
+      }
+
+      // Fetch top rated movies
+      console.log(`⭐ Fetching top rated movies (${topRatedPages} pages)...`);
+      for (let page = 1; page <= topRatedPages; page++) {
+        const topRatedData = await this.fetchTopRatedMovies(page);
+        topRatedData.results.forEach(movie => allMovies.add(JSON.stringify(movie)));
+        console.log(`Fetched page ${page} of top rated movies`);
+      }
+
+      // Convert back to array and parse
+      const uniqueMovies = Array.from(allMovies).map(movieStr => JSON.parse(movieStr));
+      console.log(`🎯 Found ${uniqueMovies.length} unique movies to process`);
+
+      // Save movies to database
+      let savedCount = 0;
+      for (const movie of uniqueMovies) {
+        try {
+          let movieData = this.transformMovieData(movie);
+          
+          // Fetch detailed information if requested
+          if (includeDetails && movie.id) {
+            try {
+              const detailedMovie = await this.fetchMovieDetails(movie.id);
+              movieData = this.transformMovieData(detailedMovie);
+            } catch (detailError) {
+              console.warn(`Could not fetch details for "${movie.title}", using basic data`);
+            }
+          }
+
+          await this.saveMovieToDatabase(movieData, movie.genre_ids);
+          savedCount++;
+          
+          // Add small delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 100));
+        } catch (error) {
+          console.error(`Failed to save movie "${movie.title}":`, error.message);
+        }
+      }
+
+      console.log(`🎉 Database population complete! Saved ${savedCount} movies and ${genres.length} genres.`);
+      return {
+        moviesProcessed: uniqueMovies.length,
+        moviesSaved: savedCount,
+        genresSaved: genres.length
+      };
 
     } catch (error) {
-      console.error('Error populating database:', error);
+      console.error('Error populating database:', error.message);
+      throw error;
     }
   }
 }

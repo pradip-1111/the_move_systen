@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSearchParams } from 'react-router-dom';
-import { fetchMovies, setFilters, clearFilters } from '../store/slices/movieSlice';
+import { fetchMovies } from '../store/slices/movieSlice';
 import MovieCard from '../components/movies/MovieCard';
 import LoadingSpinner from '../components/ui/LoadingSpinner';
 import ErrorMessage from '../components/ui/ErrorMessage';
@@ -9,7 +9,7 @@ import ErrorMessage from '../components/ui/ErrorMessage';
 const MoviesPage = () => {
   const dispatch = useDispatch();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { movies, loading, error, totalPages, currentPage, filters } = useSelector(state => state.movies);
+  const { movies, loading, error, totalPages, currentPage } = useSelector(state => state.movies);
   
   const [localFilters, setLocalFilters] = useState({
     search: searchParams.get('search') || '',
@@ -77,32 +77,32 @@ const MoviesPage = () => {
     <div className="container mx-auto px-4 py-8">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">Discover Movies</h1>
-        <p className="text-gray-600">Find your next favorite movie from our extensive collection</p>
+        <h1 className="text-3xl font-bold text-gray-900 dark:text-white mb-2">Discover Movies</h1>
+        <p className="text-gray-600 dark:text-gray-300">Find your next favorite movie from our extensive collection</p>
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow-md p-6 mb-8">
+      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-8">
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mb-4">
           {/* Search */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Search</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Search</label>
             <input
               type="text"
               placeholder="Search movies..."
               value={localFilters.search}
               onChange={(e) => handleFilterChange('search', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
             />
           </div>
 
           {/* Genre */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Genre</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Genre</label>
             <select
               value={localFilters.genre}
               onChange={(e) => handleFilterChange('genre', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
             >
               <option value="">All Genres</option>
               <option value="action">Action</option>
@@ -117,11 +117,11 @@ const MoviesPage = () => {
 
           {/* Year */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Year</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Year</label>
             <select
               value={localFilters.year}
               onChange={(e) => handleFilterChange('year', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
             >
               <option value="">Any Year</option>
               <option value="2024">2024</option>
@@ -134,11 +134,11 @@ const MoviesPage = () => {
 
           {/* Rating */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Min Rating</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Min Rating</label>
             <select
               value={localFilters.rating}
               onChange={(e) => handleFilterChange('rating', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
             >
               <option value="">Any Rating</option>
               <option value="4">4+ Stars</option>
@@ -149,11 +149,11 @@ const MoviesPage = () => {
 
           {/* Sort By */}
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Sort By</label>
             <select
               value={localFilters.sortBy}
               onChange={(e) => handleFilterChange('sortBy', e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500 dark:bg-gray-700 dark:text-white"
             >
               <option value="popularity">Popularity</option>
               <option value="rating">Rating</option>
@@ -165,7 +165,7 @@ const MoviesPage = () => {
 
         <button
           onClick={clearAllFilters}
-          className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+          className="text-blue-600 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 text-sm font-medium"
         >
           Clear All Filters
         </button>
@@ -183,7 +183,7 @@ const MoviesPage = () => {
         <>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
             {movies.map(movie => (
-              <MovieCard key={movie._id} movie={movie} />
+              <MovieCard key={movie.id} movie={movie} />
             ))}
           </div>
 
@@ -193,19 +193,19 @@ const MoviesPage = () => {
               <button
                 onClick={() => handlePageChange(currentPage - 1)}
                 disabled={currentPage <= 1}
-                className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Previous
               </button>
 
-              <span className="px-4 py-2 text-sm text-gray-700">
+              <span className="px-4 py-2 text-sm text-gray-700 dark:text-gray-300">
                 Page {currentPage} of {totalPages}
               </span>
 
               <button
                 onClick={() => handlePageChange(currentPage + 1)}
                 disabled={currentPage >= totalPages}
-                className="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-3 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Next
               </button>
@@ -214,8 +214,8 @@ const MoviesPage = () => {
         </>
       ) : !loading ? (
         <div className="text-center py-12">
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No movies found</h3>
-          <p className="text-gray-600 mb-4">Try adjusting your filters or search terms</p>
+          <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">No movies found</h3>
+          <p className="text-gray-600 dark:text-gray-300 mb-4">Try adjusting your filters or search terms</p>
           <button
             onClick={clearAllFilters}
             className="bg-blue-600 text-white px-4 py-2 rounded-md hover:bg-blue-700"

@@ -17,6 +17,8 @@ import DatabaseStatus from './components/common/DatabaseStatus';
 import HomePage from './pages/HomePage';
 import MoviesPage from './pages/MoviesPage';
 import MovieDetailPage from './pages/MovieDetailPage';
+import AboutPage from './pages/AboutPage';
+import ContactPage from './pages/ContactPage';
 import ProfilePage from './pages/ProfilePage';
 import WatchlistPage from './pages/WatchlistPage';
 import LoginPage from './pages/auth/LoginPage';
@@ -67,6 +69,8 @@ const ThemedApp = () => {
             <Route path="/" element={<HomePage />} />
             <Route path="/movies" element={<MoviesPage />} />
             <Route path="/movies/:id" element={<MovieDetailPage />} />
+            <Route path="/about" element={<AboutPage />} />
+            <Route path="/contact" element={<ContactPage />} />
             <Route path="/login" element={<LoginPage />} />
             <Route path="/register" element={<RegisterPage />} />
 

@@ -1,8 +1,8 @@
 const express = require('express');
 const { body, query, validationResult } = require('express-validator');
-const Watchlist = require('../models/Watchlist');
-const Movie = require('../models/Movie');
+const { Watchlist, Movie, User } = require('../models/index');
 const { authenticate, checkResourceOwnership } = require('../middleware/auth');
+const { Op } = require('sequelize');
 
 const router = express.Router();
 
@@ -31,43 +31,81 @@ router.get('/:userId', authenticate, checkResourceOwnership('watchlist'), [
       sortBy = 'added'
     } = req.query;
 
-    const skip = (page - 1) * limit;
+    const offset = (page - 1) * limit;
 
-    const watchlistItems = await Watchlist.getUserWatchlist(userId, status, {
-      sortBy,
+    // Build where clause
+    let whereClause = { userId: userId };
+    if (status && status !== 'all') {
+      whereClause.status = status;
+    }
+
+    // Build order clause
+    let orderClause = [];
+    switch (sortBy) {
+      case 'added':
+        orderClause = [['createdAt', 'DESC']];
+        break;
+      case 'title':
+        orderClause = [[{ model: Movie, as: 'movie' }, 'title', 'ASC']];
+        break;
+      case 'rating':
+        orderClause = [[{ model: Movie, as: 'movie' }, 'averageRating', 'DESC']];
+        break;
+      case 'priority':
+        orderClause = [['priority', 'DESC']];
+        break;
+      case 'date_watched':
+        orderClause = [['watchedAt', 'DESC']];
+        break;
+    }
+
+    const { rows: watchlistItems, count: totalItems } = await Watchlist.findAndCountAll({
+      where: whereClause,
+      include: [{
+        model: Movie,
+        as: 'movie',
+        attributes: ['id', 'title', 'posterUrl', 'releaseDate', 'genres', 'averageRating', 'runtime'],
+        where: { isActive: true },
+        required: true
+      }],
+      order: orderClause,
       limit: parseInt(limit),
-      skip: parseInt(skip)
+      offset: parseInt(offset)
     });
 
-    // Filter out items where movie was not populated (deleted movies)
-    const validItems = watchlistItems.filter(item => item.movie);
-
-    // Count total items for pagination
-    let countQuery = { user: userId };
-    if (status && status !== 'all') {
-      countQuery.status = status;
-    }
-    
-    const totalItems = await Watchlist.countDocuments(countQuery);
+    // Transform the watchlist items to include movie data directly
+    const movies = watchlistItems.map(item => ({
+      id: item.movieId, // Use movieId from watchlist item
+      title: item.movie.title,
+      posterUrl: item.movie.posterUrl,
+      releaseDate: item.movie.releaseDate,
+      genres: item.movie.genres,
+      averageRating: item.movie.averageRating,
+      runtime: item.movie.runtime,
+      director: 'Unknown Director', // Fallback since director column doesn't exist
+      description: item.movie.title, // Use title as fallback for description
+      year: item.movie.releaseDate ? new Date(item.movie.releaseDate).getFullYear() : null,
+      // Include watchlist-specific data
+      watchlistStatus: item.status,
+      watchlistPriority: item.priority,
+      watchlistNotes: item.notes,
+      addedAt: item.createdAt,
+      personalRating: item.personalRating,
+      watchedAt: item.watchedAt
+    }));
 
     res.json({
-      watchlist: validItems,
+      movies: movies,
       pagination: {
         currentPage: parseInt(page),
         totalPages: Math.ceil(totalItems / limit),
         totalItems,
-        hasNext: skip + validItems.length < totalItems,
+        hasNext: offset + watchlistItems.length < totalItems,
         hasPrev: page > 1
       }
     });
   } catch (error) {
     console.error('Get watchlist error:', error);
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid user ID',
-        message: 'The provided user ID is not valid'
-      });
-    }
     res.status(500).json({
       error: 'Server error',
       message: 'Unable to fetch watchlist'
@@ -77,7 +115,7 @@ router.get('/:userId', authenticate, checkResourceOwnership('watchlist'), [
 
 // Add movie to watchlist
 router.post('/:userId', authenticate, checkResourceOwnership('watchlist'), [
-  body('movieId').isMongoId().withMessage('Valid movie ID is required'),
+  body('movieId').isInt().withMessage('Valid movie ID is required'),
   body('status').optional().isIn(['want_to_watch', 'watching', 'watched']).withMessage('Invalid status'),
   body('priority').optional().isIn(['low', 'medium', 'high']).withMessage('Invalid priority'),
   body('notes').optional().isLength({ max: 500 }).withMessage('Notes cannot exceed 500 characters')
@@ -96,7 +134,7 @@ router.post('/:userId', authenticate, checkResourceOwnership('watchlist'), [
     const { movieId, status = 'want_to_watch', priority = 'medium', notes = '' } = req.body;
 
     // Check if movie exists
-    const movie = await Movie.findById(movieId);
+    const movie = await Movie.findByPk(movieId);
     if (!movie || !movie.isActive) {
       return res.status(404).json({
         error: 'Movie not found',
@@ -105,7 +143,9 @@ router.post('/:userId', authenticate, checkResourceOwnership('watchlist'), [
     }
 
     // Check if movie is already in watchlist
-    const existingEntry = await Watchlist.findOne({ user: userId, movie: movieId });
+    const existingEntry = await Watchlist.findOne({ 
+      where: { userId: userId, movieId: movieId } 
+    });
     if (existingEntry) {
       return res.status(400).json({
         error: 'Movie already in watchlist',
@@ -114,20 +154,26 @@ router.post('/:userId', authenticate, checkResourceOwnership('watchlist'), [
     }
 
     // Create watchlist entry
-    const watchlistEntry = new Watchlist({
-      user: userId,
-      movie: movieId,
+    const watchlistEntry = await Watchlist.create({
+      userId: userId,
+      movieId: movieId,
       status,
       priority,
       notes
     });
 
-    await watchlistEntry.save();
-    await watchlistEntry.populate('movie', 'title posterUrl releaseDate genres averageRating runtime');
+    // Get entry with movie info for response
+    const entryWithMovie = await Watchlist.findByPk(watchlistEntry.id, {
+      include: [{
+        model: Movie,
+        as: 'movie',
+        attributes: ['id', 'title', 'posterUrl', 'releaseDate', 'genres', 'averageRating', 'runtime']
+      }]
+    });
 
     res.status(201).json({
       message: 'Movie added to watchlist successfully',
-      watchlistEntry
+      watchlistEntry: entryWithMovie
     });
   } catch (error) {
     console.error('Add to watchlist error:', error);
@@ -158,7 +204,9 @@ router.put('/:userId/:movieId', authenticate, checkResourceOwnership('watchlist'
     const { userId, movieId } = req.params;
     const updateData = req.body;
 
-    const watchlistEntry = await Watchlist.findOne({ user: userId, movie: movieId });
+    const watchlistEntry = await Watchlist.findOne({ 
+      where: { userId: userId, movieId: movieId } 
+    });
     if (!watchlistEntry) {
       return res.status(404).json({
         error: 'Watchlist entry not found',
@@ -166,28 +214,23 @@ router.put('/:userId/:movieId', authenticate, checkResourceOwnership('watchlist'
       });
     }
 
-    // Update fields
-    Object.keys(updateData).forEach(key => {
-      if (updateData[key] !== undefined) {
-        watchlistEntry[key] = updateData[key];
-      }
-    });
+    await watchlistEntry.update(updateData);
 
-    await watchlistEntry.save();
-    await watchlistEntry.populate('movie', 'title posterUrl releaseDate genres averageRating runtime');
+    // Get updated entry with movie info
+    const updatedEntry = await Watchlist.findByPk(watchlistEntry.id, {
+      include: [{
+        model: Movie,
+        as: 'movie',
+        attributes: ['id', 'title', 'posterUrl', 'releaseDate', 'genres', 'averageRating', 'runtime']
+      }]
+    });
 
     res.json({
       message: 'Watchlist entry updated successfully',
-      watchlistEntry
+      watchlistEntry: updatedEntry
     });
   } catch (error) {
     console.error('Update watchlist entry error:', error);
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid ID',
-        message: 'The provided user or movie ID is not valid'
-      });
-    }
     res.status(500).json({
       error: 'Server error',
       message: 'Unable to update watchlist entry'
@@ -200,7 +243,9 @@ router.delete('/:userId/:movieId', authenticate, checkResourceOwnership('watchli
   try {
     const { userId, movieId } = req.params;
 
-    const watchlistEntry = await Watchlist.findOne({ user: userId, movie: movieId });
+    const watchlistEntry = await Watchlist.findOne({ 
+      where: { userId: userId, movieId: movieId } 
+    });
     if (!watchlistEntry) {
       return res.status(404).json({
         error: 'Watchlist entry not found',
@@ -208,19 +253,13 @@ router.delete('/:userId/:movieId', authenticate, checkResourceOwnership('watchli
       });
     }
 
-    await watchlistEntry.remove();
+    await watchlistEntry.destroy();
 
     res.json({
       message: 'Movie removed from watchlist successfully'
     });
   } catch (error) {
     console.error('Remove from watchlist error:', error);
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid ID',
-        message: 'The provided user or movie ID is not valid'
-      });
-    }
     res.status(500).json({
       error: 'Server error',
       message: 'Unable to remove movie from watchlist'
@@ -245,7 +284,9 @@ router.patch('/:userId/:movieId/watched', authenticate, checkResourceOwnership('
     const { userId, movieId } = req.params;
     const { personalRating } = req.body;
 
-    const watchlistEntry = await Watchlist.findOne({ user: userId, movie: movieId });
+    const watchlistEntry = await Watchlist.findOne({ 
+      where: { userId: userId, movieId: movieId } 
+    });
     if (!watchlistEntry) {
       return res.status(404).json({
         error: 'Watchlist entry not found',
@@ -253,21 +294,31 @@ router.patch('/:userId/:movieId/watched', authenticate, checkResourceOwnership('
       });
     }
 
-    await watchlistEntry.markAsWatched(personalRating);
-    await watchlistEntry.populate('movie', 'title posterUrl releaseDate genres averageRating runtime');
+    const updateData = {
+      status: 'watched',
+      watchedAt: new Date()
+    };
+    if (personalRating) {
+      updateData.personalRating = personalRating;
+    }
+
+    await watchlistEntry.update(updateData);
+
+    // Get updated entry with movie info
+    const updatedEntry = await Watchlist.findByPk(watchlistEntry.id, {
+      include: [{
+        model: Movie,
+        as: 'movie',
+        attributes: ['id', 'title', 'posterUrl', 'releaseDate', 'genres', 'averageRating', 'runtime']
+      }]
+    });
 
     res.json({
       message: 'Movie marked as watched successfully',
-      watchlistEntry
+      watchlistEntry: updatedEntry
     });
   } catch (error) {
     console.error('Mark as watched error:', error);
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid ID',
-        message: 'The provided user or movie ID is not valid'
-      });
-    }
     res.status(500).json({
       error: 'Server error',
       message: 'Unable to mark movie as watched'
@@ -279,18 +330,43 @@ router.patch('/:userId/:movieId/watched', authenticate, checkResourceOwnership('
 router.get('/:userId/stats', authenticate, checkResourceOwnership('watchlist'), async (req, res) => {
   try {
     const userId = req.params.userId;
+    const sequelize = require('../config/database');
 
-    const stats = await Watchlist.getUserWatchlistStats(userId);
+    const [results] = await sequelize.query(`
+      SELECT 
+        COUNT(*) as totalMovies,
+        COUNT(CASE WHEN status = 'want_to_watch' THEN 1 END) as wantToWatch,
+        COUNT(CASE WHEN status = 'watching' THEN 1 END) as watching,
+        COUNT(CASE WHEN status = 'watched' THEN 1 END) as watched,
+        COUNT(CASE WHEN priority = 'high' THEN 1 END) as highPriority,
+        COUNT(CASE WHEN priority = 'medium' THEN 1 END) as mediumPriority,
+        COUNT(CASE WHEN priority = 'low' THEN 1 END) as lowPriority,
+        AVG(CASE WHEN personalRating IS NOT NULL THEN personalRating END) as averagePersonalRating
+      FROM Watchlists 
+      WHERE userId = :userId
+    `, {
+      replacements: { userId },
+      type: sequelize.QueryTypes.SELECT
+    });
 
-    res.json(stats);
+    const stats = results[0];
+
+    res.json({
+      totalMovies: parseInt(stats.totalMovies),
+      statusDistribution: {
+        wantToWatch: parseInt(stats.wantToWatch),
+        watching: parseInt(stats.watching),
+        watched: parseInt(stats.watched)
+      },
+      priorityDistribution: {
+        high: parseInt(stats.highPriority),
+        medium: parseInt(stats.mediumPriority),
+        low: parseInt(stats.lowPriority)
+      },
+      averagePersonalRating: parseFloat(stats.averagePersonalRating) || 0
+    });
   } catch (error) {
     console.error('Get watchlist stats error:', error);
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid user ID',
-        message: 'The provided user ID is not valid'
-      });
-    }
     res.status(500).json({
       error: 'Server error',
       message: 'Unable to fetch watchlist statistics'
@@ -303,7 +379,9 @@ router.get('/:userId/check/:movieId', authenticate, checkResourceOwnership('watc
   try {
     const { userId, movieId } = req.params;
 
-    const watchlistEntry = await Watchlist.isInWatchlist(userId, movieId);
+    const watchlistEntry = await Watchlist.findOne({
+      where: { userId: userId, movieId: movieId }
+    });
 
     res.json({
       inWatchlist: !!watchlistEntry,
@@ -311,12 +389,6 @@ router.get('/:userId/check/:movieId', authenticate, checkResourceOwnership('watc
     });
   } catch (error) {
     console.error('Check watchlist error:', error);
-    if (error.name === 'CastError') {
-      return res.status(400).json({
-        error: 'Invalid ID',
-        message: 'The provided user or movie ID is not valid'
-      });
-    }
     res.status(500).json({
       error: 'Server error',
       message: 'Unable to check watchlist status'
@@ -339,11 +411,25 @@ router.get('/popular', [
     }
 
     const { limit = 10 } = req.query;
+    const sequelize = require('../config/database');
 
-    const popularMovies = await Watchlist.getPopularWatchlistMovies(parseInt(limit));
+    const [results] = await sequelize.query(`
+      SELECT 
+        m.*,
+        COUNT(w.id) as watchlistCount
+      FROM Movies m
+      INNER JOIN Watchlists w ON m.id = w.movieId
+      WHERE m.isActive = true
+      GROUP BY m.id
+      ORDER BY watchlistCount DESC, m.averageRating DESC
+      LIMIT :limit
+    `, {
+      replacements: { limit: parseInt(limit) },
+      type: sequelize.QueryTypes.SELECT
+    });
 
     res.json({
-      movies: popularMovies
+      movies: results
     });
   } catch (error) {
     console.error('Get popular watchlist movies error:', error);

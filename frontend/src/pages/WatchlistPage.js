@@ -14,7 +14,7 @@ const WatchlistPage = () => {
   const { movies, loading, error, totalMovies } = useSelector(state => state.watchlist);
   const { user: currentUser, isAuthenticated } = useSelector(state => state.auth);
   
-  const isOwnWatchlist = isAuthenticated && currentUser?._id === userId;
+  const isOwnWatchlist = isAuthenticated && currentUser?.id === userId;
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -98,12 +98,12 @@ const WatchlistPage = () => {
       {movies && movies.length > 0 ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {movies.map(movie => (
-            <div key={movie._id} className="relative">
+            <div key={movie.id} className="relative">
               <MovieCard movie={movie} />
               
               {isOwnWatchlist && (
                 <button
-                  onClick={() => handleRemoveFromWatchlist(movie._id)}
+                  onClick={() => handleRemoveFromWatchlist(movie.id)}
                   className="absolute top-2 right-2 bg-red-500 text-white p-2 rounded-full hover:bg-red-600 transition-colors shadow-lg"
                   title="Remove from watchlist"
                 >

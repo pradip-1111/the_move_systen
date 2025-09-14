@@ -81,7 +81,7 @@ const watchlistSlice = createSlice({
     },
     toggleMovieInWatchlist: (state, action) => {
       const movieId = action.payload;
-      const existingIndex = state.movies.findIndex(movie => movie._id === movieId);
+      const existingIndex = state.movies.findIndex(movie => movie.id === movieId);
       
       if (existingIndex !== -1) {
         state.movies.splice(existingIndex, 1);
@@ -127,11 +127,36 @@ const watchlistSlice = createSlice({
         state.error = null;
       })
       .addCase(addToWatchlist.fulfilled, (state, action) => {
+        console.log('✅ Movie added to watchlist successfully');
+        console.log('📦 Add response payload:', action.payload);
         state.loading = false;
-        const newMovie = action.payload.movie;
-        if (newMovie && !state.movies.find(movie => movie._id === newMovie._id)) {
-          state.movies.unshift(newMovie);
-          state.totalMovies += 1;
+        
+        // The backend returns { message, watchlistEntry } format
+        const watchlistEntry = action.payload.watchlistEntry;
+        if (watchlistEntry && watchlistEntry.movie) {
+          // Transform the watchlist entry to movie format for consistency
+          const movieData = {
+            id: watchlistEntry.movie.id,
+            title: watchlistEntry.movie.title,
+            posterUrl: watchlistEntry.movie.posterUrl,
+            releaseDate: watchlistEntry.movie.releaseDate,
+            genres: watchlistEntry.movie.genres,
+            averageRating: watchlistEntry.movie.averageRating,
+            runtime: watchlistEntry.movie.runtime,
+            // Include watchlist-specific data
+            watchlistStatus: watchlistEntry.status,
+            watchlistPriority: watchlistEntry.priority,
+            watchlistNotes: watchlistEntry.notes,
+            addedAt: watchlistEntry.createdAt,
+            personalRating: watchlistEntry.personalRating,
+            watchedAt: watchlistEntry.watchedAt
+          };
+          
+          // Only add if not already present
+          if (!state.movies.find(movie => movie.id === movieData.id)) {
+            state.movies.unshift(movieData);
+            state.totalMovies += 1;
+          }
         }
       })
       .addCase(addToWatchlist.rejected, (state, action) => {
@@ -148,7 +173,7 @@ const watchlistSlice = createSlice({
       .addCase(removeFromWatchlist.fulfilled, (state, action) => {
         state.loading = false;
         const { movieId } = action.payload;
-        state.movies = state.movies.filter(movie => movie._id !== movieId);
+        state.movies = state.movies.filter(movie => movie.id !== movieId);
         state.totalMovies = Math.max(0, state.totalMovies - 1);
       })
       .addCase(removeFromWatchlist.rejected, (state, action) => {

@@ -1,7 +1,8 @@
 const express = require('express');
 const { body, validationResult } = require('express-validator');
-const User = require('../models/User');
+const { User } = require('../models/index');
 const { generateToken, authenticate } = require('../middleware/auth');
+const { Op } = require('sequelize');
 
 const router = express.Router();
 
@@ -35,7 +36,9 @@ router.post('/register', [
 
     // Check if user already exists
     const existingUser = await User.findOne({
-      $or: [{ email }, { username }]
+      where: {
+        [Op.or]: [{ email }, { username }]
+      }
     });
 
     if (existingUser) {
@@ -47,22 +50,20 @@ router.post('/register', [
     }
 
     // Create new user
-    const user = new User({
+    const user = await User.create({
       username,
       email,
       password
     });
 
-    await user.save();
-
     // Generate token
-    const token = generateToken(user._id);
+    const token = generateToken(user.id);
 
     res.status(201).json({
       message: 'User registered successfully',
       token,
       user: {
-        id: user._id,
+        id: user.id,
         username: user.username,
         email: user.email,
         profilePicture: user.profilePicture,
@@ -131,18 +132,17 @@ router.post('/login', [
     await user.save();
 
     // Generate token
-    const token = generateToken(user._id);
+    const token = generateToken(user.id);
 
     res.json({
       message: 'Login successful',
       token,
       user: {
-        id: user._id,
+        id: user.id,
         username: user.username,
         email: user.email,
         profilePicture: user.profilePicture,
         isAdmin: user.isAdmin,
-        favoriteGenres: user.favoriteGenres,
         reviewCount: user.reviewCount,
         watchlistCount: user.watchlistCount
       }
@@ -161,12 +161,11 @@ router.get('/me', authenticate, async (req, res) => {
   try {
     res.json({
       user: {
-        id: req.user._id,
+        id: req.user.id,
         username: req.user.username,
         email: req.user.email,
         profilePicture: req.user.profilePicture,
         bio: req.user.bio,
-        favoriteGenres: req.user.favoriteGenres,
         isAdmin: req.user.isAdmin,
         reviewCount: req.user.reviewCount,
         watchlistCount: req.user.watchlistCount,
@@ -200,15 +199,7 @@ router.put('/profile', authenticate, [
   body('bio')
     .optional()
     .isLength({ max: 500 })
-    .withMessage('Bio cannot exceed 500 characters'),
-  body('favoriteGenres')
-    .optional()
-    .isArray()
-    .withMessage('Favorite genres must be an array'),
-  body('favoriteGenres.*')
-    .optional()
-    .isIn(['Action', 'Adventure', 'Animation', 'Comedy', 'Crime', 'Documentary', 'Drama', 'Family', 'Fantasy', 'History', 'Horror', 'Music', 'Mystery', 'Romance', 'Science Fiction', 'TV Movie', 'Thriller', 'War', 'Western'])
-    .withMessage('Invalid genre')
+    .withMessage('Bio cannot exceed 500 characters')
 ], async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -220,12 +211,12 @@ router.put('/profile', authenticate, [
       });
     }
 
-    const { username, email, bio, favoriteGenres, profilePicture } = req.body;
+    const { username, email, bio, profilePicture } = req.body;
     const user = req.user;
 
     // Check if username or email is being changed and already exists
     if (username && username !== user.username) {
-      const existingUser = await User.findOne({ username });
+      const existingUser = await User.findOne({ where: { username } });
       if (existingUser) {
         return res.status(400).json({
           error: 'Username taken',
@@ -236,7 +227,7 @@ router.put('/profile', authenticate, [
     }
 
     if (email && email !== user.email) {
-      const existingUser = await User.findOne({ email });
+      const existingUser = await User.findOne({ where: { email } });
       if (existingUser) {
         return res.status(400).json({
           error: 'Email taken',
@@ -248,7 +239,6 @@ router.put('/profile', authenticate, [
 
     // Update other fields
     if (bio !== undefined) user.bio = bio;
-    if (favoriteGenres !== undefined) user.favoriteGenres = favoriteGenres;
     if (profilePicture !== undefined) user.profilePicture = profilePicture;
 
     await user.save();
@@ -256,12 +246,11 @@ router.put('/profile', authenticate, [
     res.json({
       message: 'Profile updated successfully',
       user: {
-        id: user._id,
+        id: user.id,
         username: user.username,
         email: user.email,
         profilePicture: user.profilePicture,
         bio: user.bio,
-        favoriteGenres: user.favoriteGenres,
         isAdmin: user.isAdmin,
         reviewCount: user.reviewCount,
         watchlistCount: user.watchlistCount
@@ -283,9 +272,7 @@ router.put('/change-password', authenticate, [
     .withMessage('Current password is required'),
   body('newPassword')
     .isLength({ min: 6 })
-    .withMessage('New password must be at least 6 characters long')
-    .matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/)
-    .withMessage('New password must contain at least one lowercase letter, one uppercase letter, and one number'),
+    .withMessage('New password must be at least 6 characters long'),
   body('confirmNewPassword')
     .custom((value, { req }) => {
       if (value !== req.body.newPassword) {
@@ -353,7 +340,7 @@ router.get('/verify', authenticate, (req, res) => {
   res.json({
     valid: true,
     user: {
-      id: req.user._id,
+      id: req.user.id,
       username: req.user.username,
       email: req.user.email,
       isAdmin: req.user.isAdmin

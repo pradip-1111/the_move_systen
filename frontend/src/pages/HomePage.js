@@ -148,7 +148,7 @@ const HomePage = () => {
               
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
                 {popular.slice(0, 4).map((movie, index) => (
-                  <div key={movie._id} className="slide-in-right" style={{ animationDelay: `${index * 150}ms` }}>
+                  <div key={movie.id} className="slide-in-right" style={{ animationDelay: `${index * 150}ms` }}>
                     <MovieCard movie={movie} />
                   </div>
                 ))}
@@ -189,7 +189,7 @@ const HomePage = () => {
               
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
                 {recent.slice(0, 4).map((movie, index) => (
-                  <div key={movie._id} className="slide-in-right" style={{ animationDelay: `${index * 150}ms` }}>
+                  <div key={movie.id} className="slide-in-right" style={{ animationDelay: `${index * 150}ms` }}>
                     <MovieCard movie={movie} />
                   </div>
                 ))}
@@ -230,7 +230,7 @@ const HomePage = () => {
               
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8">
                 {topRated.slice(0, 4).map((movie, index) => (
-                  <div key={movie._id} className="slide-in-right" style={{ animationDelay: `${index * 150}ms` }}>
+                  <div key={movie.id} className="slide-in-right" style={{ animationDelay: `${index * 150}ms` }}>
                     <MovieCard movie={movie} />
                   </div>
                 ))}
