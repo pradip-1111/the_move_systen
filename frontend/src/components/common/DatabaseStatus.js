@@ -2,18 +2,15 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../../services/api';
 
 const DatabaseStatus = () => {
-  const [status, setStatus] = useState({ database: 'checking' });
   const [showMessage, setShowMessage] = useState(false);
 
   useEffect(() => {
     const checkHealth = async () => {
       try {
         const response = await api.get('/health');
-        setStatus(response.data);
         setShowMessage(response.data.database === 'Disconnected');
       } catch (error) {
         console.log('Health check failed:', error.message);
-        setStatus({ database: 'unavailable' });
         setShowMessage(true);
       }
     };

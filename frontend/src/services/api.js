@@ -96,7 +96,7 @@ export const watchlistAPI = {
 export { api };
 
 // Default export
-export default {
+const apiExports = {
   authAPI,
   moviesAPI,
   reviewsAPI,
@@ -104,3 +104,5 @@ export default {
   watchlistAPI,
   api
 };
+
+export default apiExports;

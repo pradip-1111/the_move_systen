@@ -39,7 +39,7 @@ const MovieDetailPage = () => {
       setError('Invalid movie ID');
       setLoading(false);
     }
-  }, [id]);
+  }, [id, fetchMovie, fetchReviews]);
 
   // Debug logging
   useEffect(() => {
@@ -71,11 +71,6 @@ const MovieDetailPage = () => {
     }
   };
 
-  const getUserId = () => {
-    if (user?.id) return user.id;
-    if (user?.id) return user.id;
-    return null;
-  };
 
   const handleWatchlistToggle = async () => {
     if (!isAuthenticated) {
